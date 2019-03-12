@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     // -- BEGIN ASSIGNMENT --
     
     // TODO: parallelize the following computation using OpenMP
-    
+    #pragma omp parallel for 
     for(long long i = 0; i<N; i++) {
         for(long long j = 0; j<N; j++) {
             value_t sum = 0;
