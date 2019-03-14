@@ -25,11 +25,11 @@ void releaseCode(kernel_code code);
 
 typedef value_t* Matrix;
 
-Matrix createMatrix(int N, int M);
+Matrix createMatrix(int X, int Y);
 
 void releaseMatrix(Matrix m);
 
-void printMatrix(Matrix m, int N);
+void printMatrix(Matrix m, int X, int Y);
 
 // ----------------------
 
@@ -42,26 +42,35 @@ int main(int argc, char** argv) {
         N = atoi(argv[1]);
     }
     int M = N;
+    int O = N;
     printf("Computing matrix-matrix product with N=%d\n", N);
 
     
     // ---------- setup ----------
 
     // create two input matrices (on heap!)
-    Matrix A = createMatrix(N,N);
-    Matrix B = createMatrix(N,N);
+    Matrix A = createMatrix(M,N);
+    Matrix B = createMatrix(N,O);
     
-    // fill matrices
-    for(int i = 0; i<N; i++) {
+    // fill matrix A MxN
+    for(int i = 0; i<M; i++) {
         for(int j = 0; j<N; j++) {
             A[i*N+j] = i*j;             // some arbitrary matrix - note: flattend indexing!
-            B[i*N+j] = (i==j) ? 1 : 0;  // identity
+            //B[i*N+j] = (i==j) ? 1 : 0;  // identity
+        }
+    }
+ 
+    // fill matrix B NxO  
+    for(int i = 0; i<N; i++) {
+        for(int j = 0; j<O; j++) {
+            //A[i*N+j] = i*j;             // some arbitrary matrix - note: flattend indexing!
+            B[i*O+j] = (i==j) ? 1 : 0;  // identity
         }
     }
     
     // ---------- compute ----------
     
-    Matrix C = createMatrix(N,N);
+    Matrix C = createMatrix(M,O);
     
     // -- BEGIN ASSIGNMENT --
     
@@ -101,45 +110,74 @@ int main(int argc, char** argv) {
         // Part A - resource management
     
         // 1) get platform
-        ret = clGetPlatformIDs(1, &platform_id, &ret_num_platforms);
+        if (clGetPlatformIDs(1, &platform_id, &ret_num_platforms) != CL_SUCCESS){
+			printf("clGetPlatformIDs != CL_SUCCESS");
+			return -1;
+		}
         
         // 2) get device
-        ret = clGetDeviceIDs( platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, &ret_num_devices);
+        if (clGetDeviceIDs( platform_id, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, &ret_num_devices) != CL_SUCCESS){
+			printf("clGetDeviceIDs != CL_SUCCESS");
+			return -1;
+		}
 
         // 3) create context
         context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
+        if(ret < 0)
+			printf("clCreateContext != CL_SUCCESS");
         
         // 4) create command queue
         command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+        if(ret < 0)
+			printf("clCreateCommandQueue != CL_SUCCESS");
 
 
 
         // Part B - data management
         
         // 5) create memory buffers on device
-        size_t vec_size = sizeof(value_t) * N * M; // quadratic form
-        cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        cl_mem devVecC = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vec_size, NULL, &ret);
+        size_t mat_sizeA = sizeof(value_t) * M * N; 
+        size_t mat_sizeB = sizeof(value_t) * N * O;        
+        size_t mat_sizeC = sizeof(value_t) * M * O;         
+        cl_mem devMatA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, mat_sizeA, NULL, &ret);
+        if(ret < 0)
+			printf("clCreateBuffer != CL_SUCCESS");
+        cl_mem devMatB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, mat_sizeB, NULL, &ret);
+        if(ret < 0)
+			printf("clCreateBuffer != CL_SUCCESS");
+        cl_mem devMatC = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, mat_sizeC, NULL, &ret);
+        if(ret < 0)
+			printf("clCreateBuffer != CL_SUCCESS");
 
 
         // 6) transfer input data from host to device (synchronously)
-        ret = clEnqueueWriteBuffer(command_queue, devVecA, CL_TRUE, 0, vec_size, &A[0], 0, NULL, NULL);
-        ret = clEnqueueWriteBuffer(command_queue, devVecB, CL_TRUE, 0, vec_size, &B[0], 0, NULL, NULL);
+        if(clEnqueueWriteBuffer(command_queue, devMatA, CL_TRUE, 0, mat_sizeA, &A[0], 0, NULL, NULL) != CL_SUCCESS){
+			printf("clEnqueueWriteBuffer != CL_SUCCESS");
+			return -1;
+		}
+        if(clEnqueueWriteBuffer(command_queue, devMatB, CL_TRUE, 0, mat_sizeB, &B[0], 0, NULL, NULL) != CL_SUCCESS){
+			printf("clEnqueueWriteBuffer != CL_SUCCESS");
+			return -1;
+		}
 
 
 
         // Part C - computation
 
         // 6) load kernel code from file
-        kernel_code code = loadCode("vec_add.cl");
+        kernel_code code = loadCode("mat_mul.cl");
         
         // 7) compile kernel program from source
         program = clCreateProgramWithSource(context, 1, &code.code,
 				                      (const size_t *)&code.size, &ret);
+		if(ret < 0)
+			printf("clCreateProgramWithSource != CL_SUCCESS");		                      
 
         // 8) build program (compile + link for device architecture)
-        ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
+        if(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL) != CL_SUCCESS){
+			printf("clBuildProgram != CL_SUCCESS");
+			return -1;
+		}
         
         // report kernel build errors
         if (ret != CL_SUCCESS) {
@@ -158,42 +196,97 @@ int main(int argc, char** argv) {
         }
 
         // 9) create OpenCL kernel
-        kernel = clCreateKernel(program, "vec_add", &ret);
+        kernel = clCreateKernel(program, "mat_mul", &ret);
+        if(ret < 0)
+			printf("clCreateKernel != CL_SUCCESS");
 
         // 10) set arguments
-        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecC);
-        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecA);
-        ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), &devVecB);
-        ret = clSetKernelArg(kernel, 3, sizeof(int), &N);
-        ret = clSetKernelArg(kernel, 4, sizeof(int), &M);
-
+        if(clSetKernelArg(kernel, 0, sizeof(cl_mem), &devMatC) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+        if(clSetKernelArg(kernel, 1, sizeof(cl_mem), &devMatA) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+        if(clSetKernelArg(kernel, 2, sizeof(cl_mem), &devMatB) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+        if(clSetKernelArg(kernel, 3, sizeof(int), &M) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+        if(clSetKernelArg(kernel, 4, sizeof(int), &N) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+        if(clSetKernelArg(kernel, 5, sizeof(int), &O) != CL_SUCCESS){
+			printf("clSetKernelArg != CL_SUCCESS");
+			return -1;
+		}
+                        
         // 11) schedule kernel
-        // size_t global_work_offset = 0;
-        size_t global_work_size[2] = {N, M};
-        ret = clEnqueueNDRangeKernel(command_queue, kernel, 
+        //size_t global_work_offset = NULL;
+		size_t global_work_size[2] = {M, O}; // M O 
+		
+        if(clEnqueueNDRangeKernel(command_queue, kernel, 
                     2, NULL, global_work_size, NULL, 
                     0, NULL, NULL
-        );
-
+		) != CL_SUCCESS){
+			printf("clEnqueueNDRangeKernel != CL_SUCCESS");
+			return -1;
+		}
+        
         // 12) transfer data back to host
-        ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, vec_size, &C[0], 0, NULL, NULL);
+        if(clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, mat_sizeC, &C[0], 0, NULL, NULL) != CL_SUCCESS){
+			printf("clEnqueueReadBuffer != CL_SUCCESS");
+			return -1;
+		}
         
         // Part D - cleanup
         
         // wait for completed operations (should all have finished already)
-        ret = clFlush(command_queue);
-        ret = clFinish(command_queue);
-        ret = clReleaseKernel(kernel);
-        ret = clReleaseProgram(program);
+        if(clFlush(command_queue) != CL_SUCCESS){
+			printf("clFlush != CL_SUCCESS");
+			return -1;
+		}
+        if(clFinish(command_queue) != CL_SUCCESS){
+			printf("clFinish != CL_SUCCESS");
+			return -1;
+		}
+        if(clReleaseKernel(kernel) != CL_SUCCESS){
+			printf("clReleaseKernel != CL_SUCCESS");
+			return -1;
+		}
+        if(clReleaseProgram(program) != CL_SUCCESS){
+			printf("clReleaseProgram != CL_SUCCESS");
+			return -1;
+		}
         
         // free device memory
-        ret = clReleaseMemObject(devVecA);
-        ret = clReleaseMemObject(devVecB);
-        ret = clReleaseMemObject(devVecC);
+        if(clReleaseMemObject(devMatA) != CL_SUCCESS){
+			printf("clReleaseMemObject != CL_SUCCESS");
+			return -1;
+		}
+        if(clReleaseMemObject(devMatB) != CL_SUCCESS){
+			printf("clReleaseMemObject != CL_SUCCESS");
+			return -1;
+		}
+        if(clReleaseMemObject(devMatC) != CL_SUCCESS){
+			printf("clReleaseMemObject != CL_SUCCESS");
+			return -1;
+		}
         
         // free management resources
-        ret = clReleaseCommandQueue(command_queue);
-        ret = clReleaseContext(context);
+        if(clReleaseCommandQueue(command_queue) != CL_SUCCESS){
+			printf("clReleaseCommandQueue != CL_SUCCESS");
+			return -1;
+		}
+        if(clReleaseContext(context) != CL_SUCCESS){
+			printf("clReleaseContext != CL_SUCCESS");
+			return -1;
+		}
 
     }
     
@@ -204,13 +297,14 @@ int main(int argc, char** argv) {
     printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
-    
-    //printMatrix(C, N);
+    //printMatrix(A, M, N);
+    //printMatrix(B, N, O);
+    //printMatrix(C, M, O);
     
     bool success = true;
-    for(long long i = 0; i<N; i++) {
-        for(long long j = 0; j<N; j++) {
-            if (C[i*N+j] == i*j) continue;
+    for(long long i = 0; i<M; i++) {
+        for(long long j = 0; j<O; j++) {
+            if (C[i*O+j] == i*j) continue;
             success = false;
             break;
         }
@@ -229,9 +323,9 @@ int main(int argc, char** argv) {
 }
 
 
-Matrix createMatrix(int N, int M) {
+Matrix createMatrix(int X, int Y) {
     // create data and index vector
-    return malloc(sizeof(value_t)*N*M);
+    return malloc(sizeof(value_t)*X*Y);
 }
 
 void releaseMatrix(Matrix m) {
@@ -263,11 +357,11 @@ void releaseCode(kernel_code code) {
 }
 
 // print matrix
-void printMatrix(Matrix m, int N) {
-	printf("N = %d\n", N);
-	for(long long i = 0; i<N; i++) {
-		for(long long j = 0; j<N; j++) {
-			printf("%f ", m[i*N+j]);
+void printMatrix(Matrix m, int X, int Y) {
+	printf("M = %d\nO = %d\n", X, Y);
+	for(long long i = 0; i<X; i++) {
+		for(long long j = 0; j<Y; j++) {
+			printf("%f ", m[i*Y+j]);
 		}
 		printf("\n");
 	}
