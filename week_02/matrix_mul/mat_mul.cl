@@ -16,7 +16,7 @@ __kernel void mat_mul(
     // compute C := A * B
     float sum = 0;
     for(int k = 0; k<N; k++) {
-		sum += A[o*N+k] * B[m+N*k];	
+		sum += A[m*N+k] * B[O*k+o];	
     }
     C[m*O+o] = sum;
 }
