@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         N = atoi(argv[1]);
     }
-    int M = N;
+
     printf("Computing matrix-matrix product with N=%d\n", N);
 
     
@@ -64,20 +64,7 @@ int main(int argc, char** argv) {
     Matrix C = createMatrix(N,N);
     
     // -- BEGIN ASSIGNMENT --
-    
-    // TODO: parallelize the following computation using OpenCL
-    
-    /*
-    for(long long i = 0; i<N; i++) {
-        for(long long j = 0; j<N; j++) {
-            value_t sum = 0;
-            for(long long k = 0; k<N; k++) {
-                sum += A[i*N+k] * B[k*N+j];
-            }
-            C[i*N+j] = sum;
-        }
-    }
-    */
+
     timestamp begin = now();
     
     // --- OpenCL part ---
@@ -117,7 +104,7 @@ int main(int argc, char** argv) {
         // Part B - data management
         
         // 5) create memory buffers on device
-        size_t vec_size = sizeof(value_t) * N * M; // quadratic form
+        size_t vec_size = sizeof(value_t) * N * N; // quadratic form
         cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
         cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
         cl_mem devVecC = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vec_size, NULL, &ret);
@@ -132,7 +119,7 @@ int main(int argc, char** argv) {
         // Part C - computation
 
         // 6) load kernel code from file
-        kernel_code code = loadCode("vec_add.cl");
+        kernel_code code = loadCode("mat_mul.cl");
         
         // 7) compile kernel program from source
         program = clCreateProgramWithSource(context, 1, &code.code,
@@ -158,18 +145,17 @@ int main(int argc, char** argv) {
         }
 
         // 9) create OpenCL kernel
-        kernel = clCreateKernel(program, "vec_add", &ret);
+        kernel = clCreateKernel(program, "mat_mul", &ret);
 
         // 10) set arguments
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecC);
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecA);
         ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), &devVecB);
         ret = clSetKernelArg(kernel, 3, sizeof(int), &N);
-        ret = clSetKernelArg(kernel, 4, sizeof(int), &M);
 
         // 11) schedule kernel
         // size_t global_work_offset = 0;
-        size_t global_work_size[2] = {N, M};
+        size_t global_work_size[2] = {N, N};
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 
                     2, NULL, global_work_size, NULL, 
                     0, NULL, NULL

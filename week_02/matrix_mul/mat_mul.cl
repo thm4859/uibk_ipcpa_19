@@ -1,10 +1,9 @@
 
-__kernel void vec_add(
+__kernel void mat_mul(
     __global float* C, 
     __global const float* A, 
     __global const float* B,
-    int N,
-    int M
+    int N
 ) {
     // obtain position of this 'thread'
     size_t j = get_global_id(0);
