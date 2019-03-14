@@ -8,8 +8,8 @@ __kernel void mat_mul(
     int O  //column B, column C
 ) {
     // obtain position of this 'thread'
-    size_t m = get_global_id(0); //j
-    size_t o = get_global_id(1); //i
+    size_t m = get_global_id(0);
+    size_t o = get_global_id(1);
 
     // if beyond boundaries => skip this one
     
@@ -17,9 +17,6 @@ __kernel void mat_mul(
     float sum = 0;
     for(int k = 0; k<N; k++) {
 		sum += A[m*N+k] * B[o+N*k];	
-
     }
-    //C[i*N+j] = sum; //OK
-    //C[o*M+m] = sum; //OK
     C[m*O+o] = sum;
 }
