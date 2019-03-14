@@ -37,7 +37,7 @@ void printMatrix(Matrix m, int X, int Y);
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    int N = 1000;
+    int N = 15;
     if (argc > 1) {
         N = atoi(argv[1]);
     }
@@ -297,9 +297,9 @@ int main(int argc, char** argv) {
     printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
-    //printMatrix(A, M, N);
-    //printMatrix(B, N, O);
-    //printMatrix(C, M, O);
+    printMatrix(A, M, N);
+    printMatrix(B, N, O);
+    printMatrix(C, M, O);
     
     bool success = true;
     for(long long i = 0; i<M; i++) {
