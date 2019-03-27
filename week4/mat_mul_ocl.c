@@ -160,10 +160,13 @@ int main(int argc, char** argv) {
         cl_event matrix_a_write_event, matrix_b_write_event;
         err = clEnqueueWriteBuffer(command_queue, devMatA, CL_FALSE, 0, N * N * sizeof(value_t), A, 0, NULL, &matrix_a_write_event);
         CLU_ERRCHECK(err, "Failed to write matrix A to device");
+        
         err = clEnqueueWriteBuffer(command_queue, devMatB, CL_TRUE, 0,  N * N * sizeof(value_t), B, 0, NULL, &matrix_b_write_event);
         CLU_ERRCHECK(err, "Failed to write matrix B to device");
         
         // calculate data transfer times to device
+        err = clWaitForEvents(1, &matrix_a_write_event);
+        err = clWaitForEvents(1, &matrix_b_write_event);
         cl_ulong start_matrix_a_write, end_matrix_a_write, start_matrix_b_write, end_matrix_b_write;
         err = clGetEventProfilingInfo(matrix_a_write_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_matrix_a_write, NULL);
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
@@ -211,6 +214,7 @@ int main(int argc, char** argv) {
         cl_ulong start_matrix_c_read, end_matrix_c_read;
         err = clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, &matrix_c_read);
         CLU_ERRCHECK(err, "Failed reading back result");
+        err = clWaitForEvents(1, &matrix_c_read);
         
         err = clGetEventProfilingInfo(matrix_c_read, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_matrix_c_read, &return_bytes);
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
@@ -223,12 +227,23 @@ int main(int argc, char** argv) {
         double matrix_b_write_time = (double) (end_matrix_b_write - start_matrix_b_write);
         double matrix_c_read_time = (double) (end_matrix_c_read - start_matrix_c_read);
         double totalTime = executionTimeOnDevice + matrix_a_write_time + matrix_b_write_time + matrix_c_read_time;
+        // data transfer rate
+        double matrix_a_write_rate = N*N*sizeof(value_t)*8 / (matrix_a_write_time/1000000000);
+        double matrix_b_write_rate = N*N*sizeof(value_t)*8 / (matrix_b_write_time/1000000000);
+        double matrix_c_read_rate = N*N*sizeof(value_t)*8 / (matrix_c_read_time/1000000000);
+        // MFLOPs performance of the kernel
+        double mflops = N*N*N / (totalTime/1000000000) /1000000;
         
         printf("Data transfer time to device - Matrix A: \t\t\t%.3f ms\n", matrix_a_write_time/1000000);
+        printf("Data transfer rate to device - Matrix A: \t\t\t%.3f Gbit/s\n", matrix_a_write_rate/1000000000);
         printf("Data transfer time to device - Matrix B: \t\t\t%.3f ms\n", matrix_b_write_time/1000000);
+        printf("Data transfer rate to device - Matrix B: \t\t\t%.3f Gbit/s\n", matrix_b_write_rate/1000000000);
         printf("Data transfer time from device - Matrix C: \t\t\t%.3f ms\n", matrix_c_read_time/1000000);
+        printf("Data transfer rate from device - Matrix C: \t\t\t%.3f Gbit/s\n", matrix_c_read_rate/1000000000);
         printf("Time to execute the kernel: \t\t\t\t\t%.3f ms\n", executionTimeOnDevice/1000000);
+        printf("MFLOPs achieved by the kernel: \t\t\t\t\t%.3f MFLOPs\n", mflops);
         printf("Total time to transfer to/from device and calculations: \t%.3f ms\n", totalTime/1000000);
+      
         
         
         // Part 7: cleanup
@@ -249,7 +264,7 @@ int main(int argc, char** argv) {
     }
     
     timestamp end = now();
-    printf("CPU: Total time: \t\t\t\t\t%.3f ms\n", (end-begin)*1000);
+    printf("CPU: Total time: \t\t\t\t\t\t%.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
     
