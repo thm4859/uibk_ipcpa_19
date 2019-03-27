@@ -176,6 +176,9 @@ int main(int argc, char** argv) {
             sizeof(int), &N
         );
         cl_event time_event;
+        
+        timestamp begin_clEnqueueNDRangeKernel = now();
+        
         CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, 0, size, NULL, 0, NULL, &time_event), "Failed to enqueue 2D kernel");
         
         clFinish(command_queue);
@@ -191,14 +194,19 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
         
         run_time = (double)(end_time-start_time);
-        printf("Kernel runtime: \t%.3f ms\n", run_time/1000000);
+        printf("Kernel runtime: \t\t\t%.3f ms\n", run_time/1000000);
         
         
 
         // Part 6: copy results back to host
         err = clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed reading back result");
-
+		
+		timestamp end_clEnqueueReadBuffer = now();
+		printf("Datatransfer time: \t\t\t%.3f ms\n", ((end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000) - run_time/1000000);
+		printf("Datatransfer time and kernelruntime: \t%.3f ms\n", (end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000);
+		
+		
         // Part 7: cleanup
         // wait for completed operations (there should be none)
         CLU_ERRCHECK(clFlush(command_queue),    "Failed to flush command queue");
@@ -217,7 +225,7 @@ int main(int argc, char** argv) {
     }
     
     timestamp end = now();
-    printf("Total time: \t\t%.3f ms\n", (end-begin)*1000);
+    printf("Total time: \t\t\t\t%.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
     
