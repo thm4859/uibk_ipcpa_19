@@ -157,10 +157,24 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to create buffer for matrix C");
 
         // Part 3: fill memory buffers
-        err = clEnqueueWriteBuffer(command_queue, devMatA, CL_FALSE, 0, N * N * sizeof(value_t), A, 0, NULL, NULL);
+        cl_event matrix_a_write_event, matrix_b_write_event;
+        err = clEnqueueWriteBuffer(command_queue, devMatA, CL_FALSE, 0, N * N * sizeof(value_t), A, 0, NULL, &matrix_a_write_event);
         CLU_ERRCHECK(err, "Failed to write matrix A to device");
-        err = clEnqueueWriteBuffer(command_queue, devMatB, CL_TRUE, 0,  N * N * sizeof(value_t), B, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(command_queue, devMatB, CL_TRUE, 0,  N * N * sizeof(value_t), B, 0, NULL, &matrix_b_write_event);
         CLU_ERRCHECK(err, "Failed to write matrix B to device");
+        
+        // calculate data transfer times to device
+        cl_ulong start_matrix_a_write, end_matrix_a_write, start_matrix_b_write, end_matrix_b_write;
+        err = clGetEventProfilingInfo(matrix_a_write_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_matrix_a_write, NULL);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
+        err = clGetEventProfilingInfo(matrix_a_write_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end_matrix_a_write, NULL);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
+        
+        err = clGetEventProfilingInfo(matrix_b_write_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_matrix_b_write, NULL);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
+        err = clGetEventProfilingInfo(matrix_b_write_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end_matrix_b_write, NULL);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
+
 
         // Part 4: create kernel from source
         cl_program program = cluBuildProgramFromFile(context, device_id, "mat_mul.cl", NULL);
@@ -175,52 +189,48 @@ int main(int argc, char** argv) {
             sizeof(cl_mem), (void *)&devMatB,
             sizeof(int), &N
         );
-        cl_event time_event;
         
-        //timestamp begin_clEnqueueNDRangeKernel = now();
+        cl_event kernel_time;
         
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, 0, size, NULL, 0, NULL, &time_event), "Failed to enqueue 2D kernel");
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, 0, size, NULL, 0, NULL, &kernel_time), "Failed to enqueue 2D kernel");
         
         clFinish(command_queue);
-        err = clWaitForEvents(1, &time_event);
-        cl_ulong timeQueued, timeSubmitted, timeStart, timeEnd;
-        double totalTime, submittingTime, subToStartTime, executionTimeOnDevice;
+        err = clWaitForEvents(1, &kernel_time);
+        cl_ulong start_kernel_time, end_kernel_time;
         size_t return_bytes;
         
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_QUEUED, sizeof(cl_ulong), &timeQueued, &return_bytes);
-        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
+        err = clGetEventProfilingInfo(kernel_time, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_kernel_time, &return_bytes);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
         
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_SUBMIT, sizeof(cl_ulong), &timeSubmitted, &return_bytes);
-        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
-        
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &timeStart, &return_bytes);
-        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
-        
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &timeEnd, &return_bytes);
+        err = clGetEventProfilingInfo(kernel_time, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end_kernel_time, &return_bytes);
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
         
-        //total_time = (double)(timeEnd-timeQueued);
-        //queue_time = (double)(timeEnd-timeSubmit);
-        //start_time = (double)(timeEnd-timeStart);
-        
-        totalTime = (double)(timeEnd-timeQueued);
-        submittingTime = (double)(timeSubmitted-timeQueued);
-        subToStartTime = (double)(timeStart-timeSubmitted);
-        executionTimeOnDevice = (double)(timeEnd-timeStart);
-        printf("Time: begin queueing -> end of execution on device: \t%.3f ms\n", totalTime/1000000);
-        printf("Time for submitting (of queued data): \t\t\t%.3f ms\n", submittingTime/1000000);
-        printf("Time to start execution (of submitted data): \t\t%.3f ms\n", subToStartTime/1000000);
-        printf("Time to execute (of submitted data: \t\t\t%.3f ms\n", executionTimeOnDevice/1000000);
-
+ 
         // Part 6: copy results back to host
-        err = clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
+        cl_event matrix_c_read;
+        cl_ulong start_matrix_c_read, end_matrix_c_read;
+        err = clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, &matrix_c_read);
         CLU_ERRCHECK(err, "Failed reading back result");
-		
-		//timestamp end_clEnqueueReadBuffer = now();
-		//printf("Datatransfer time: \t\t\t%.3f ms\n", ((end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000) - run_time/1000000);
-		//printf("Datatransfer time and kernelruntime: \t%.3f ms\n", (end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000);
-		
-		
+        
+        err = clGetEventProfilingInfo(matrix_c_read, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start_matrix_c_read, &return_bytes);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_START");
+        err = clGetEventProfilingInfo(matrix_c_read, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end_matrix_c_read, &return_bytes);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
+        
+        // Print the data transfer times and kernel time
+        double executionTimeOnDevice = (double)(end_kernel_time - start_kernel_time);
+        double matrix_a_write_time = (double) (end_matrix_a_write - start_matrix_a_write);
+        double matrix_b_write_time = (double) (end_matrix_b_write - start_matrix_b_write);
+        double matrix_c_read_time = (double) (end_matrix_c_read - start_matrix_c_read);
+        double totalTime = executionTimeOnDevice + matrix_a_write_time + matrix_b_write_time + matrix_c_read_time;
+        
+        printf("Data transfer time to device - Matrix A: \t\t\t%.3f ms\n", matrix_a_write_time/1000000);
+        printf("Data transfer time to device - Matrix B: \t\t\t%.3f ms\n", matrix_b_write_time/1000000);
+        printf("Data transfer time from device - Matrix C: \t\t\t%.3f ms\n", matrix_c_read_time/1000000);
+        printf("Time to execute the kernel: \t\t\t\t\t%.3f ms\n", executionTimeOnDevice/1000000);
+        printf("Total time to transfer to/from device and calculations: \t%.3f ms\n", totalTime/1000000);
+        
+        
         // Part 7: cleanup
         // wait for completed operations (there should be none)
         CLU_ERRCHECK(clFlush(command_queue),    "Failed to flush command queue");
