@@ -59,82 +59,82 @@ int main(int argc, char** argv) {
 */        
 
     
-	cl_int err;
-    int i, j;
-    char* value;
-    size_t valueSize;
-    cl_uint platformCount;
-    cl_platform_id* platforms;
-    cl_uint deviceCount;
-    cl_device_id* devices;
-    cl_uint maxComputeUnits;
+		cl_int err;
+		int i, j;
+		char* value;
+		size_t valueSize;
+		cl_uint platformCount;
+		cl_platform_id* platforms;
+		cl_uint deviceCount;
+		cl_device_id* devices;
+		cl_uint maxComputeUnits;
 
-    // get all platforms
-    err = clGetPlatformIDs(0, NULL, &platformCount);
-    CLU_ERRCHECK(err, "Failed to get clGetPlatformIDs");
-    platforms = (cl_platform_id*) malloc(sizeof(cl_platform_id) * platformCount);
-    err = clGetPlatformIDs(platformCount, platforms, NULL);
-    CLU_ERRCHECK(err, "Failed to get clGetPlatformIDs");
+		// get all platforms
+		err = clGetPlatformIDs(0, NULL, &platformCount);
+		CLU_ERRCHECK(err, "Failed to get clGetPlatformIDs");
+		platforms = (cl_platform_id*) malloc(sizeof(cl_platform_id) * platformCount);
+		err = clGetPlatformIDs(platformCount, platforms, NULL);
+		CLU_ERRCHECK(err, "Failed to get clGetPlatformIDs");
 
-    for (i = 0; i < platformCount; i++) {
+		for (i = 0; i < platformCount; i++) {
 
-        // get all devices
-        err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, NULL, &deviceCount);
-        CLU_ERRCHECK(err, "Failed to get clGetDeviceIDs: CL_DEVICE_TYPE_ALL");
-        //CLU_ERRCHECK(err, "Failed to write matrix B to device");
-        devices = (cl_device_id*) malloc(sizeof(cl_device_id) * deviceCount);
-        err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, deviceCount, devices, NULL);
-        CLU_ERRCHECK(err, "Failed to get clGetDeviceIDs: CL_DEVICE_TYPE_ALL");
+			// get all devices
+			err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, NULL, &deviceCount);
+			CLU_ERRCHECK(err, "Failed to get clGetDeviceIDs: CL_DEVICE_TYPE_ALL");
+			//CLU_ERRCHECK(err, "Failed to write matrix B to device");
+			devices = (cl_device_id*) malloc(sizeof(cl_device_id) * deviceCount);
+			err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, deviceCount, devices, NULL);
+			CLU_ERRCHECK(err, "Failed to get clGetDeviceIDs: CL_DEVICE_TYPE_ALL");
 
-        // for each device print critical attributes
-        for (j = 0; j < deviceCount; j++) {
+			// for each device print critical attributes
+			for (j = 0; j < deviceCount; j++) {
 
-            // print device name
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, NULL, &valueSize);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_NAME");
-            value = (char*) malloc(valueSize);
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, valueSize, value, NULL);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_NAME");
-            printf("%d. Device: %s\n", j+1, value);
-            free(value);
+				// print device name
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, NULL, &valueSize);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_NAME");
+				value = (char*) malloc(valueSize);
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_NAME, valueSize, value, NULL);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_NAME");
+				printf("%d. Device: %s\n", j+1, value);
+				free(value);
 
-            // print hardware device version
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_VERSION, 0, NULL, &valueSize);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_VERSION");
-            value = (char*) malloc(valueSize);
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_VERSION, valueSize, value, NULL);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_VERSION");
-            printf(" %d.%d Hardware version: %s\n", j+1, 1, value);
-            free(value);
+				// print hardware device version
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_VERSION, 0, NULL, &valueSize);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_VERSION");
+				value = (char*) malloc(valueSize);
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_VERSION, valueSize, value, NULL);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_VERSION");
+				printf(" %d.%d Hardware version: %s\n", j+1, 1, value);
+				free(value);
 
-            // print software driver version
-            err = clGetDeviceInfo(devices[j], CL_DRIVER_VERSION, 0, NULL, &valueSize);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DRIVER_VERSION");
-            value = (char*) malloc(valueSize);
-            err = clGetDeviceInfo(devices[j], CL_DRIVER_VERSION, valueSize, value, NULL);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DRIVER_VERSION");
-            printf(" %d.%d Software version: %s\n", j+1, 2, value);
-            free(value);
+				// print software driver version
+				err = clGetDeviceInfo(devices[j], CL_DRIVER_VERSION, 0, NULL, &valueSize);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DRIVER_VERSION");
+				value = (char*) malloc(valueSize);
+				err = clGetDeviceInfo(devices[j], CL_DRIVER_VERSION, valueSize, value, NULL);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DRIVER_VERSION");
+				printf(" %d.%d Software version: %s\n", j+1, 2, value);
+				free(value);
 
-            // print c version supported by compiler for device
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_OPENCL_C_VERSION, 0, NULL, &valueSize);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_OPENCL_C_VERSION");
-            value = (char*) malloc(valueSize);
-            err = clGetDeviceInfo(devices[j], CL_DEVICE_OPENCL_C_VERSION, valueSize, value, NULL);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_OPENCL_C_VERSION");
-            printf(" %d.%d OpenCL C version: %s\n", j+1, 3, value);
-            free(value);
+				// print c version supported by compiler for device
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_OPENCL_C_VERSION, 0, NULL, &valueSize);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_OPENCL_C_VERSION");
+				value = (char*) malloc(valueSize);
+				err = clGetDeviceInfo(devices[j], CL_DEVICE_OPENCL_C_VERSION, valueSize, value, NULL);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_OPENCL_C_VERSION");
+				printf(" %d.%d OpenCL C version: %s\n", j+1, 3, value);
+				free(value);
 
-            // print parallel compute units
-            clGetDeviceInfo(devices[j], CL_DEVICE_MAX_COMPUTE_UNITS,
-                    sizeof(maxComputeUnits), &maxComputeUnits, NULL);
-            CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_MAX_COMPUTE_UNITS");
-            printf(" %d.%d Parallel compute units: %d\n", j+1, 4, maxComputeUnits);
+				// print parallel compute units
+				clGetDeviceInfo(devices[j], CL_DEVICE_MAX_COMPUTE_UNITS,
+						sizeof(maxComputeUnits), &maxComputeUnits, NULL);
+				CLU_ERRCHECK(err, "Failed to get clGetDeviceInfo: CL_DEVICE_MAX_COMPUTE_UNITS");
+				printf(" %d.%d Parallel compute units: %d\n", j+1, 4, maxComputeUnits);
 
-        }
-        free(devices);
-    }
-    free(platforms);       
+			}
+			free(devices);
+		}
+		free(platforms);       
        
        
        cl_int  ciErrNum;
@@ -146,30 +146,7 @@ int main(int argc, char** argv) {
        
        
        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
 
         // Part 2: create memory buffers
         cl_mem devMatA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, N * N * sizeof(value_t), NULL, &err);
