@@ -1,21 +1,19 @@
+#pragma once
 
-__kernel void mat_mul(
-    __global float* c, 
-    __global const float* a, 
-    __global const float* b,
-    int N
-) {
-    // obtain position of this 'thread'
-    size_t i = get_global_id(0);
-    size_t j = get_global_id(1);
+#include <time.h>
 
-    // if beyond boundaries => skip this one
-    if (i >= N || j >= N) return;
+// add a pseudo-bool type
+typedef int bool;
+#define true  (0==0)
+#define false (0!=0)
 
-    // compute C := A * B
-    float sum = 0;
-    for(int k = 0; k<N; k++) {
-        sum += a[i*N+k] * b[k*N+j];
-    }
-    c[i*N+j] = sum;
+
+// a small wrapper for convenient time measurements
+
+typedef double timestamp;
+
+timestamp now() {
+    struct timespec spec;
+    timespec_get(&spec, TIME_UTC);
+    return spec.tv_sec + spec.tv_nsec / (1e9);
 }
