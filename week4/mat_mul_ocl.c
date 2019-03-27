@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
         double matrix_b_write_rate = N*N*sizeof(value_t)*8 / (matrix_b_write_time/1000000000);
         double matrix_c_read_rate = N*N*sizeof(value_t)*8 / (matrix_c_read_time/1000000000);
         // MFLOPs performance of the kernel
-        double mflops = N*N*N / (totalTime/1000000000) /1000000;
+        double mflops = N*N*N*8.f / (totalTime/1000000000) /1000000; // 8 operation
         
         printf("Data transfer time to device - Matrix A: \t\t\t%.3f ms\n", matrix_a_write_time/1000000);
         printf("Data transfer rate to device - Matrix A: \t\t\t%.3f Gbit/s\n", matrix_a_write_rate/1000000000);
