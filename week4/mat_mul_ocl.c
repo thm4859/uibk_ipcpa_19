@@ -177,34 +177,48 @@ int main(int argc, char** argv) {
         );
         cl_event time_event;
         
-        timestamp begin_clEnqueueNDRangeKernel = now();
+        //timestamp begin_clEnqueueNDRangeKernel = now();
         
         CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, 0, size, NULL, 0, NULL, &time_event), "Failed to enqueue 2D kernel");
         
         clFinish(command_queue);
         err = clWaitForEvents(1, &time_event);
-        cl_ulong start_time, end_time;
-        double run_time;
+        cl_ulong timeQueued, timeSubmitted, timeStart, timeEnd;
+        double totalTime, submittingTime, subToStartTime, executionTimeOnDevice;
         size_t return_bytes;
         
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_QUEUED, sizeof(cl_ulong), &start_time, &return_bytes);
+        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_QUEUED, sizeof(cl_ulong), &timeQueued, &return_bytes);
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
         
-        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end_time, &return_bytes);
+        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_SUBMIT, sizeof(cl_ulong), &timeSubmitted, &return_bytes);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
+        
+        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &timeStart, &return_bytes);
+        CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_QUEUED");
+        
+        err = clGetEventProfilingInfo(time_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &timeEnd, &return_bytes);
         CLU_ERRCHECK(err, "Failed to clGetEventProfilingInfo: CL_PROFILING_COMMAND_END");
         
-        run_time = (double)(end_time-start_time);
-        printf("Kernel runtime: \t\t\t%.3f ms\n", run_time/1000000);
+        //total_time = (double)(timeEnd-timeQueued);
+        //queue_time = (double)(timeEnd-timeSubmit);
+        //start_time = (double)(timeEnd-timeStart);
         
-        
+        totalTime = (double)(timeEnd-timeQueued);
+        submittingTime = (double)(timeSubmitted-timeQueued);
+        subToStartTime = (double)(timeStart-timeSubmitted);
+        executionTimeOnDevice = (double)(timeEnd-timeStart);
+        printf("Time: begin queueing -> end of execution on device: \t%.3f ms\n", totalTime/1000000);
+        printf("Time for submitting (of queued data): \t\t\t%.3f ms\n", submittingTime/1000000);
+        printf("Time to start execution (of submitted data): \t\t%.3f ms\n", subToStartTime/1000000);
+        printf("Time to execute (of submitted data: \t\t\t%.3f ms\n", executionTimeOnDevice/1000000);
 
         // Part 6: copy results back to host
         err = clEnqueueReadBuffer(command_queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed reading back result");
 		
-		timestamp end_clEnqueueReadBuffer = now();
-		printf("Datatransfer time: \t\t\t%.3f ms\n", ((end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000) - run_time/1000000);
-		printf("Datatransfer time and kernelruntime: \t%.3f ms\n", (end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000);
+		//timestamp end_clEnqueueReadBuffer = now();
+		//printf("Datatransfer time: \t\t\t%.3f ms\n", ((end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000) - run_time/1000000);
+		//printf("Datatransfer time and kernelruntime: \t%.3f ms\n", (end_clEnqueueReadBuffer-begin_clEnqueueNDRangeKernel)*1000);
 		
 		
         // Part 7: cleanup
@@ -225,7 +239,7 @@ int main(int argc, char** argv) {
     }
     
     timestamp end = now();
-    printf("Total time: \t\t\t\t%.3f ms\n", (end-begin)*1000);
+    printf("CPU: Total time: \t\t\t\t\t%.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
     
