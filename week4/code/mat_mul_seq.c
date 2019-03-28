@@ -24,7 +24,9 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         N = atoi(argv[1]);
     }
+    printf("Computing matrix-matrix product with N=%d\n", N);
 
+    
     // ---------- setup ----------
 
     // create two input matrices (on heap!)
@@ -44,7 +46,6 @@ int main(int argc, char** argv) {
     Matrix C = createMatrix(N,N);
 
     timestamp begin = now();
-    #pragma omp parallel for
     for(long long i = 0; i<N; i++) {
         for(long long j = 0; j<N; j++) {
             value_t sum = 0;
@@ -55,13 +56,10 @@ int main(int argc, char** argv) {
         }
     }
     timestamp end = now();
+    printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
-    //calculation: upper bound of FLOP: each integer operation as slow as a float one
-    // also assuming the compiler does not just use inc and a cached variable to cut those operations down
-    // so N*N*N(1+1+3+3) -> N³ for the loops then 1. for the += then 1 for the * in the middle (arguably the
-    // only floating point operaton) finally +3 and +3 for the index calculation
-    // making this probably a very wide upper bound
+    
     bool success = true;
     for(long long i = 0; i<N; i++) {
         for(long long j = 0; j<N; j++) {
@@ -70,23 +68,15 @@ int main(int argc, char** argv) {
             break;
         }
     }
-
+    
+    printf("Verification: %s\n", (success)?"OK":"FAILED");
+    
     // ---------- cleanup ----------
-    float mflops=((float) N)/1000.f; 
-    mflops=mflops*8*(float)N*N/1000.f;
+    
     releaseMatrix(A);
     releaseMatrix(B);
     releaseMatrix(C);
-        printf("%d,", N);
-    printf("%.3f,", (end-begin)*1000);
-    if(success){
-        printf("1,");
-    }else{
-        printf("0,");
-    }
-    printf("%d,", 2);
-    // done
-    printf("%.3f, \n",mflops/(end-begin));
+    
     // done
     return (success) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
@@ -100,3 +90,4 @@ Matrix createMatrix(int N, int M) {
 void releaseMatrix(Matrix m) {
     free(m);
 }
+
