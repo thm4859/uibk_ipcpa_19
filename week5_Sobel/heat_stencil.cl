@@ -22,7 +22,7 @@ __kernel void stencil(
 	int iLocalPixOffset = mul24((int) get_local_id(1), M) + get_local_id(0)+1;
 
 	// Main read of GMEM data into LMEM
-	if((j > -1) && (j < source_y) && (i < source_x)) {
+	if((j > -1) && (j < N) && (i < N)) {
 		localData[iLocalPixOffset] = A[iDevGMEMOffset];
 	}else{
 		localData[iLocalPixOffset] = (value_t)0;
@@ -36,7 +36,7 @@ __kernel void stencil(
 		iLocalPixOffset += mul24((int)get_local_size(1), M);
 
 		// If source offset is within the image boundaries
-		if (((j + get_local_size(1)) < source_y) && (i < source_x)){
+		if (((j + get_local_size(1)) < N) && (i < N)){
 			// Read in top rows from the next block region down
 			localData[iLocalPixOffset] = A[iDevGMEMOffset + mul24((int)get_local_size(1), (int)get_global_size(0))];
 		}else{
@@ -45,13 +45,13 @@ __kernel void stencil(
 	}
 
 	
-	// Work items with x ID at right workgroup edge will read left apron pixel
+	// Work items with i ID at right workgroup edge will read left apron pixel
 	if (get_local_id(0) == (get_local_size(0) - 1)){
 		// MISSING
 		return; // look in the source for details
 	}
 
-	// Work items with x ID at left workgroup edge will read right apron pixel
+	// Work items with i ID at left workgroup edge will read right apron pixel
 	else if (get_local_id(0) == 0){
 		// MISSING
 		return; // look in the source for details
@@ -86,7 +86,7 @@ __kernel void stencil(
     if(jj > 1){
 		corr = 2;
     }
-    B[(i*N+j) + (ii*M+jj)] = tc + 0.2f * (tl + tr + tu + td + (-4.0f*tc));
+    B[iDevGMEMOffset] = tc + 0.2f * (tl + tr + tu + td + (-4.0f*tc));
 
 
 

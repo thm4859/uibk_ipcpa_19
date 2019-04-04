@@ -118,9 +118,9 @@ int main(int argc, char** argv) {
         clSetKernelArg(kernel, 1, sizeof(cl_mem), &devMatB);
         clSetKernelArg(kernel, 2, ((iBlockDim + 2) * (iBlockDim + 2) * sizeof(value_t)), NULL);
         
-        size_t size[2] = {N, N}; // two dimensional range
-        size_t size_local[2] = {(iBlockDim+2), (iBlockDim+2)};
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size, size_local, 0, NULL, &events[t]), "Failed to enqueue 2D kernel");
+        size_t size_global[2] = {N, N}; // two dimensional range
+        size_t size_local[2] = {(iBlockDim), (iBlockDim)};
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size_global, size_local, 0, NULL, &events[t]), "Failed to enqueue 2D kernel");
 
         // swap matrices (just handles, no conent)
         cl_mem tmp = devMatA;
