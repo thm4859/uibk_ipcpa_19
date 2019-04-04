@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
     CLU_ERRCHECK(err, "Failed to create mat_mul kernel from program");
 
     // Part 5: set arguments in kernel (those which are constant)
-    int iBlockDim = 3;
+    int iBlockDim = 3; // 3x3 fields with a border resulting 5x5 fields. each field has 1 byte, so 25 bytes have to be loaded -> GPU memory bus has 32 bytes
     clSetKernelArg(kernel, 3, sizeof(int), &source_x);
     clSetKernelArg(kernel, 4, sizeof(int), &source_y);
     clSetKernelArg(kernel, 5, sizeof(int), &N);
