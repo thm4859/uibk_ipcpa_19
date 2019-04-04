@@ -13,8 +13,9 @@ __kernel void stencil(
     // obtain position of this 'thread'
     size_t i = get_global_id(0);
     size_t j = get_global_id(1) -1; // Shift offset up 1 radius (1 row) for reads
-    size_t ii = get_local_id(0);
-    size_t jj = get_local_id(1);
+
+
+
 
 	int iDevGMEMOffset = mul24(j, (int) get_global_size(0)) + i; 
 	
@@ -69,23 +70,22 @@ __kernel void stencil(
         return;
     }
 
-    // get current temperature at (ii,jj)
-    value_t tc = localData[ii*N+jj];
+    // get current temperature at (iLocalPixOffset)
+    value_t tc = localData[iLocalPixOffset];
 
     // get temperatures left/right and up/down
-    value_t tl = ( jj !=  0  ) ? localData[ii*M+(jj-1)] : tc;
-    value_t tr = ( jj != M-1 ) ? localData[ii*M+(jj+1)] : tc;
-    value_t tu = ( ii !=  0  ) ? localData[(ii-1)*M+jj] : tc;
-    value_t td = ( ii != M-1 ) ? localData[(ii+1)*M+jj] : tc;
+    value_t tl = localData[iLocalPixOffset - 1];
+    value_t tr = localData[iLocalPixOffset + 1];
+    value_t tu = localData[iLocalPixOffset - M];
+    value_t td = localData[iLocalPixOffset + M];
+
+
+
+
+
+
 
     // update temperature at current point
-    int corr = 0;
-    if (jj >=  1) {
-		corr = 1;
-    }
-    if(jj > 1){
-		corr = 2;
-    }
     B[iDevGMEMOffset] = tc + 0.2f * (tl + tr + tu + td + (-4.0f*tc));
 
 
