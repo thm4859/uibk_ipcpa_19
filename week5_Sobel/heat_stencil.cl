@@ -48,14 +48,27 @@ __kernel void stencil(
 	
 	// Work items with i ID at right workgroup edge will read left apron pixel
 	if (get_local_id(0) == (get_local_size(0) - 1)){
-		// MISSING
-		return; // look in the source for details
+		iLocalPixOffset += 1;
+		// If source offset is within the image boundaries
+		if ((j < N) && (i < N)){
+			// Read in top rows from the next block region down
+			localData[iLocalPixOffset] = A[iDevGMEMOffset + 1];
+		}else{
+			localData[iLocalPixOffset] = (value_t)0;
+		}		
 	}
+
 
 	// Work items with i ID at left workgroup edge will read right apron pixel
 	else if (get_local_id(0) == 0){
-		// MISSING
-		return; // look in the source for details
+		iLocalPixOffset -= 1;
+				// If source offset is within the image boundaries
+		if ((j < N) && (i > 0)){
+			// Read in top rows from the next block region down
+			localData[iLocalPixOffset] = A[iDevGMEMOffset - 1];
+		}else{
+			localData[iLocalPixOffset] = (value_t)0;
+		}		
 	}
 	
 	// Synchronize the read into LMEM
