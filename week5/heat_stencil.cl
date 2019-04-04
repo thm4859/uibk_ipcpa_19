@@ -30,4 +30,18 @@ __kernel void stencil(
     // update temperature at current point
     B[i*N+j] = tc + 0.2f * (tl + tr + tu + td + (-4.0f*tc));
 
+
+	//flop calculation:
+	
+	//center: 4 (indices) -> 1 times on stencil
+	//get temp left/right/up/down: 4 * 2 (indices) = 8
+	//update temp: 7 + 2 (indices) = 9
+	
+	//flop for each part:
+	//center: (T-1) * 4
+	//get temp l/r/u/d: (T-1) * ((N * N * 8) - ((4 * N) + 4))       //((4 * N) + 4) = border
+	//update temp: (T-1) * N * N * 9
+	
+	//comlplete flop calculation:
+	//(((T-1) * 4) + ((T-1) * ((N * N * 8) - ((4 * N) + 4))) + ((T-1) * N * N * 9))
 }

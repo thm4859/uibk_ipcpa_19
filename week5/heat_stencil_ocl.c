@@ -7,7 +7,6 @@
 
 typedef float value_t;
 
-
 // -- matrix utilities --
 
 typedef value_t* Matrix;
@@ -17,6 +16,9 @@ Matrix createMatrix(int N, int M);
 void releaseMatrix(Matrix m);
 
 void printTemperature(Matrix m, int N, int M);
+
+unsigned long long getElapsed(cl_event event);
+
 
 // ----------------------
 
@@ -29,6 +31,8 @@ int main(int argc, char** argv) {
         N = atoi(argv[1]);
     }
     int T = N*100;
+    cl_event events[T];
+    
     printf("Computing heat-distribution for room size N=%d for T=%d timesteps\n", N, T);
 
     
@@ -54,7 +58,12 @@ int main(int argc, char** argv) {
     
     // ---------- compute ----------
 
+
+    unsigned long long all_events_run_kernel = 0.0f;
+
     timestamp begin = now();
+    
+
 
     // -- BEGIN ASSIGNMENT --
     
@@ -65,8 +74,15 @@ int main(int argc, char** argv) {
     cl_command_queue command_queue;
     cl_device_id device_id = cluInitDevice(0, &context, &command_queue);
 
-    // Part 2: create memory buffers
+
+    
     cl_int err;
+    
+    // for enabling: clGetEventProfilingInfo() -> CL_QUEUE_PROFILING_ENABLE
+    command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &err);
+    CLU_ERRCHECK(err, "Failed to enable CL_QUEUE_PROFILING_ENABLE on command queue");
+    
+    // Part 2: create memory buffers
     cl_mem devMatA = clCreateBuffer(context, CL_MEM_READ_WRITE, N * N * sizeof(value_t), NULL, &err);
     CLU_ERRCHECK(err, "Failed to create buffer for matrix A");
     cl_mem devMatB = clCreateBuffer(context, CL_MEM_READ_WRITE, N * N * sizeof(value_t), NULL, &err);
@@ -91,14 +107,14 @@ int main(int argc, char** argv) {
     bool dirty = false;
     for(int t=0; t<T; t++) {
 
-        // mark host-side buffer dirty
+		// mark host-side buffer dirty
         dirty = true;
 
         // enqeue a kernel call for the current time step
         clSetKernelArg(kernel, 0, sizeof(cl_mem), &devMatA);
         clSetKernelArg(kernel, 1, sizeof(cl_mem), &devMatB);
         size_t size[2] = {N, N}; // two dimensional range
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size, NULL, 0, NULL, NULL), "Failed to enqueue 2D kernel");
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size, NULL, 0, NULL, &events[t]), "Failed to enqueue 2D kernel");
 
         // swap matrices (just handles, no conent)
         cl_mem tmp = devMatA;
@@ -118,7 +134,8 @@ int main(int argc, char** argv) {
             // print the step
             printf("Step t=%d:\n", t);
             printTemperature(A,N,N);
-        }
+        }		
+        
     }
 
     // get back final version of A
@@ -147,8 +164,8 @@ int main(int argc, char** argv) {
     
 
     timestamp end = now();
-    printf("Total time: %.3f ms\n", (end-begin)*1000);
-
+    
+   
 
     // ---------- check ----------    
 
@@ -165,6 +182,19 @@ int main(int argc, char** argv) {
         }
     }
     
+	
+	// compute MFLOPs -> more information in "heat_stencil.cl"
+	double num_mflop = (((T-1) * 4) + ((T-1) * ((N * N * 8) - ((4 * N) + 4))) + ((T-1) * N * N * 9))/1e6;	
+	
+	// calculate kernel time
+	for (int i = 0; i < T; i++){
+		all_events_run_kernel += getElapsed(events[i]);
+	}
+	
+	// compute performnce of kernel
+    printf("Total time: \t\t%.3f ms\n", (end-begin)*1000);
+	printf("Kernel time:\t\t%.3f ms\n", (all_events_run_kernel/1e6));
+	printf("Performance kernel:\t%.3f MFLOP/s\n", num_mflop/(all_events_run_kernel/1e9));    
     printf("Verification: %s\n", (success)?"OK":"FAILED");
     
     // ---------- cleanup ----------
@@ -174,6 +204,7 @@ int main(int argc, char** argv) {
     // done
     return (success) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
+
 
 
 Matrix createMatrix(int N, int M) {
@@ -243,3 +274,9 @@ void printTemperature(Matrix m, int N, int M) {
 
 }
 
+unsigned long long getElapsed(cl_event event) {
+    cl_ulong starttime = 0, endtime = 0;
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &starttime, NULL), "Failed to get profiling information");
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &endtime, NULL), "Failed to get profiling information");
+	return (endtime-(unsigned long long)starttime);
+}
