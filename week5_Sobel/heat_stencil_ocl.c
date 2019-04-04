@@ -98,9 +98,12 @@ int main(int argc, char** argv) {
     CLU_ERRCHECK(err, "Failed to create mat_mul kernel from program");
 
     // Part 5: set arguments in kernel (those which are constant)
-    clSetKernelArg(kernel, 2, sizeof(int), &source_x);
-    clSetKernelArg(kernel, 3, sizeof(int), &source_y);
-    clSetKernelArg(kernel, 4, sizeof(int), &N);
+    int iBlockDim = 3;
+    clSetKernelArg(kernel, 3, sizeof(int), &source_x);
+    clSetKernelArg(kernel, 4, sizeof(int), &source_y);
+    clSetKernelArg(kernel, 5, sizeof(int), &N);
+    clSetKernelArg(kernel, 6, sizeof(int), &iBlockDim+2);
+    
     
 
     // for each time step ..
@@ -113,8 +116,11 @@ int main(int argc, char** argv) {
         // enqeue a kernel call for the current time step
         clSetKernelArg(kernel, 0, sizeof(cl_mem), &devMatA);
         clSetKernelArg(kernel, 1, sizeof(cl_mem), &devMatB);
+        clSetKernelArg(kernel, 2, ((iBlockDim + 2) * (iBlockDim + 2) * sizeof(value_t)), NULL);
+        
         size_t size[2] = {N, N}; // two dimensional range
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size, NULL, 0, NULL, &events[t]), "Failed to enqueue 2D kernel");
+        size_t size_local[2] = {(iBlockDim+2), (iBlockDim+2)};
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 2, NULL, size, size_local, 0, NULL, &events[t]), "Failed to enqueue 2D kernel");
 
         // swap matrices (just handles, no conent)
         cl_mem tmp = devMatA;

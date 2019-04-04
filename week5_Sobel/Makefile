@@ -22,11 +22,6 @@ clean:
 	@rm heat_stencil_seq heat_stencil_omp heat_stencil_ocl
 	
 run: all
-	@echo "Sequential:"
-	@./heat_stencil_seq
-	@echo
-	@echo "OpenMP:"
-	@./heat_stencil_omp
-	@echo
+
 	@echo "OpenCL:"
 	@./heat_stencil_ocl
