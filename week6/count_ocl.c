@@ -25,7 +25,7 @@ void releaseCode(kernel_code code);
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    long long N = 100*1000*1000;//actual problemsize
+    long long N = 100*1000*100;//actual problemsize
     long long M = 2;//convenient roundup
     int groups=8;
     if (argc > 1) {
@@ -39,9 +39,13 @@ int main(int argc, char** argv) {
 	srand(atoi(argv[3]));//give a random seed -> to replicate result
     }
     printf("Computing vector-add with N=%lld\n", N);
-    printf("With %d workgroups\n", groups);
-    int load = N/groups;
     
+    int load = N/groups;
+    while(load>(1024)){ //this factors a lot of unknows -> localmemory on hardware, size of float and so on...
+	groups=groups*2;
+	load = N/groups;
+    }    
+    printf("With %d workgroups\n", groups);
     if(N!=groups*load){
 	while(M<N){
 	    	M=M*2;
@@ -54,7 +58,7 @@ int main(int argc, char** argv) {
     // ---------- setup ----------
 
     // create two input vectors (on heap!)
-    value_t* res = malloc(sizeof(value_t)*groups); //just to have an overhead full of 0s 
+    int* res = malloc(sizeof(int)*groups); //just to have an overhead full of 0s 
     value_t* a = malloc(sizeof(value_t)*M);
     
     // fill array
@@ -147,7 +151,7 @@ int main(int argc, char** argv) {
         // 10) set arguments
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecA);
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecRet);
-        ret = clSetKernelArg(kernel, 2, sizeof(value_t)*load, NULL);
+        ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
         ret = clSetKernelArg(kernel, 3, sizeof(int), &M);
 
         // 11) schedule kernel
@@ -161,7 +165,7 @@ int main(int argc, char** argv) {
 	
         // 12) transfer data back to host
 	ret = clFlush(command_queue);
-        ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(value_t)*groups, &res[0], 0, NULL, NULL);
+        ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
         // Part D - cleanup
         
         // wait for completed operations (should all have finished already)
