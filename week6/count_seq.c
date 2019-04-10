@@ -5,11 +5,11 @@
 int main(int argc, char** argv) {
     
     // read N from input
-    int N = 1000;
+    long long N = 100*1000*1000;
     if (argc > 1) {
-        N = atoi(argv[1]);
+        N = atoll(argv[1]);
     }
-    printf("N = %d\n", N);
+    printf("N = %lld\n", N);
 
     // create an array of N bytes
     char* array = malloc(sizeof(char)*N);
@@ -18,13 +18,13 @@ int main(int argc, char** argv) {
     srand((unsigned) time(NULL));
 
     // fill the array with random 0/1
-    int i = 0;
+    long long i = 0;
     for (i = 0; i < N; i++) {
         array[i] = rand() % 2;
     }
 
     // count all entries that hold '1'
-    int cnt = 0;
+    long long cnt = 0;
     for (i = 0; i < N; i++) {
         int entry = array[i];
         if (entry == 1)
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     }
     
     // print the result
-    printf("Number of 1s: %d\n", cnt);
+    printf("Number of 1s: %lld\n", cnt);
     // free the allocated memory
     free(array);
 
