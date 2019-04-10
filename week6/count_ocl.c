@@ -116,12 +116,13 @@ int main(int argc, char** argv) {
         // 5) create memory buffers on device
         size_t vec_size = sizeof(value_t) * M;
         cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        CLU_ERRCHECK(ret, "Failed to create buffer for matrix A");
+        CLU_ERRCHECK(ret, "Failed to create buffer for devVecA");
         cl_mem devVecRet = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(value_t)*groups, NULL, &ret);
+		CLU_ERRCHECK(ret, "Failed to create buffer for devVecRet");
 
         // 6) transfer input data from host to device (synchronously)
         ret = clEnqueueWriteBuffer(command_queue, devVecA, CL_TRUE, 0, vec_size, &a[0], 0, NULL, NULL);
-
+		CLU_ERRCHECK(ret, "Failed to write matrix A to device");
 
 
         // Part C - computation
@@ -132,6 +133,7 @@ int main(int argc, char** argv) {
         // 7) compile kernel program from source
         program = clCreateProgramWithSource(context, 1, &code.code,
 				                      (const size_t *)&code.size, &ret);
+		CLU_ERRCHECK(ret, "Failed to clCreateProgramWithSource()");
 
         // 8) build program (compile + link for device architecture)
         ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
@@ -154,12 +156,17 @@ int main(int argc, char** argv) {
 
         // 9) create OpenCL kernel
         kernel = clCreateKernel(program, "count", &ret);
+        CLU_ERRCHECK(ret, "Failed to create COUNT kernel from program");
 	
         // 10) set arguments
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecA);
+        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 0");
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecRet);
+        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 1");
         ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
-        ret = clSetKernelArg(kernel, 3, sizeof(int), &M);
+        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 2");
+        //ret = clSetKernelArg(kernel, 3, sizeof(int), &M);
+        //CLU_ERRCHECK(ret, "Failed to clSetKernelArg 3");
 
         // 11) schedule kernel
         size_t global_work_offset = 0;
@@ -172,22 +179,32 @@ int main(int argc, char** argv) {
 	
         // 12) transfer data back to host
 		ret = clFlush(command_queue);
+		CLU_ERRCHECK(ret, "Failed to clFlush(command_queue)");
         ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+        CLU_ERRCHECK(ret, "Failed to clEnqueueReadBuffer()");
+        
         // Part D - cleanup
         
         // wait for completed operations (should all have finished already)
         
         ret = clFinish(command_queue);
+        CLU_ERRCHECK(ret, "Failed to flush command queue");
         ret = clReleaseKernel(kernel);
+        CLU_ERRCHECK(ret, "Failed to release kernel");
         ret = clReleaseProgram(program);
+        CLU_ERRCHECK(ret, "Failed to release program");
         
         // free device memory
         ret = clReleaseMemObject(devVecA);
+        CLU_ERRCHECK(ret, "Failed to release devVecA");
         ret = clReleaseMemObject(devVecRet);
+        CLU_ERRCHECK(ret, "Failed to release devVecRet");
         
         // free management resources
         ret = clReleaseCommandQueue(command_queue);
+        CLU_ERRCHECK(ret, "Failed to release command queue");
         ret = clReleaseContext(context);
+        CLU_ERRCHECK(ret, "Failed to release OpenCL context");
 
     }
     timestamp end = now();
