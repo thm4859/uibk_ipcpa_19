@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include "utils.h"
 
 int main(int argc, char** argv) {
     
@@ -22,7 +23,8 @@ int main(int argc, char** argv) {
     for (i = 0; i < N; i++) {
         array[i] = rand() % 2;
     }
-
+    
+    timestamp begin = now();
     // count all entries that hold '1'
     long long cnt = 0;
     for (i = 0; i < N; i++) {
@@ -30,8 +32,10 @@ int main(int argc, char** argv) {
         if (entry == 1)
             cnt++;
     }
+    timestamp end = now();
     
-    // print the result
+    // print info
+    printf("Total time: %.3f ms\n", (end-begin)*1000); 
     printf("Number of 1s: %lld\n", cnt);
     // free the allocated memory
     free(array);
