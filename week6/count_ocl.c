@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <math.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 
@@ -25,7 +25,8 @@ void releaseCode(kernel_code code);
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    long long N = 100*1000*1000;
+    long long N = 100*1000*1000;//actual problemsize
+    long long M = 2;//convenient roundup
     int groups=8;
     if (argc > 1) {
         N = atoll(argv[1]);
@@ -36,15 +37,21 @@ int main(int argc, char** argv) {
     printf("Computing vector-add with N=%lld\n", N);
     printf("With %d workgroups\n", groups);
     int load = N/groups;
-    if(N!=groups*load){
-	load++;
-    }
     
+    if(N!=groups*load){
+	while(M<N){
+	    	M=M*2;
+	}
+	load = M/groups;
+    }else{
+	M=N;
+    }
+    printf("M: %lld \n",M);
     // ---------- setup ----------
 
     // create two input vectors (on heap!)
     value_t* res = malloc(sizeof(value_t)*groups); //just to have an overhead full of 0s 
-    value_t* a = malloc(sizeof(value_t)*N);
+    value_t* a = malloc(sizeof(value_t)*M);
     
     // fill vectors
     for(long long i = 0; i<N; i++) {
@@ -93,7 +100,7 @@ int main(int argc, char** argv) {
         // Part B - data management
         
         // 5) create memory buffers on device
-        size_t vec_size = sizeof(value_t) * N;
+        size_t vec_size = sizeof(value_t) * M;
         cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
         cl_mem devVecRet = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(value_t)*groups, NULL, &ret);
 
@@ -137,11 +144,11 @@ int main(int argc, char** argv) {
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecA);
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecRet);
         ret = clSetKernelArg(kernel, 2, sizeof(value_t)*load, NULL);
-        ret = clSetKernelArg(kernel, 3, sizeof(int), &N);
+        ret = clSetKernelArg(kernel, 3, sizeof(int), &M);
 
         // 11) schedule kernel
         size_t global_work_offset = 0;
-        size_t global_work_size = N;
+        size_t global_work_size = M;
         size_t local_work_size = load;
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 
                     1, &global_work_offset, &global_work_size, &local_work_size, 
