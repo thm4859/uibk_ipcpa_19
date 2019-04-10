@@ -26,28 +26,35 @@ int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
     long long N = 100*1000*1000;
+    int groups=8;
     if (argc > 1) {
         N = atoll(argv[1]);
     }
+    if(argc >2){
+	groups=atoi(argv[2]);
+    }
     printf("Computing vector-add with N=%lld\n", N);
-
+    printf("With %d workgroups\n", groups);
+    int load = N/groups;
+    if(N!=groups*load){
+	load++;
+    }
     
     // ---------- setup ----------
 
     // create two input vectors (on heap!)
+    value_t* res = malloc(sizeof(value_t)*groups); //just to have an overhead full of 0s 
     value_t* a = malloc(sizeof(value_t)*N);
-    value_t* b = malloc(sizeof(value_t)*N);
     
     // fill vectors
     for(long long i = 0; i<N; i++) {
-        a[i] = i;
-        b[i] = 2 * i;
+        a[i] = i+1;
     }
     
+
     // ---------- compute ----------
     
-    value_t* c = malloc(sizeof(value_t)*N);
-
+   
     // --- OpenCL part ---
     timestamp begin = now();
     {
@@ -88,19 +95,17 @@ int main(int argc, char** argv) {
         // 5) create memory buffers on device
         size_t vec_size = sizeof(value_t) * N;
         cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        cl_mem devVecC = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, vec_size, NULL, &ret);
+        cl_mem devVecRet = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(value_t)*groups, NULL, &ret);
 
         // 6) transfer input data from host to device (synchronously)
         ret = clEnqueueWriteBuffer(command_queue, devVecA, CL_TRUE, 0, vec_size, &a[0], 0, NULL, NULL);
-        ret = clEnqueueWriteBuffer(command_queue, devVecB, CL_TRUE, 0, vec_size, &b[0], 0, NULL, NULL);
 
 
 
         // Part C - computation
 
         // 6) load kernel code from file
-        kernel_code code = loadCode("vec_add.cl");
+        kernel_code code = loadCode("count.cl");
         
         // 7) compile kernel program from source
         program = clCreateProgramWithSource(context, 1, &code.code,
@@ -126,37 +131,39 @@ int main(int argc, char** argv) {
         }
 
         // 9) create OpenCL kernel
-        kernel = clCreateKernel(program, "vec_add", &ret);
-
+        kernel = clCreateKernel(program, "count", &ret);
+	
         // 10) set arguments
-        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecC);
-        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecA);
-        ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), &devVecB);
+        ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecA);
+        ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecRet);
+        ret = clSetKernelArg(kernel, 2, sizeof(value_t)*load, NULL);
         ret = clSetKernelArg(kernel, 3, sizeof(int), &N);
 
         // 11) schedule kernel
         size_t global_work_offset = 0;
         size_t global_work_size = N;
+        size_t local_work_size = load;
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 
-                    1, &global_work_offset, &global_work_size, NULL, 
+                    1, &global_work_offset, &global_work_size, &local_work_size, 
                     0, NULL, NULL
         );
-
+	
         // 12) transfer data back to host
-        ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, vec_size, &c[0], 0, NULL, NULL);
-        
+	ret = clFlush(command_queue);
+        ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(value_t)*groups, &res[0], 0, NULL, NULL);
+        printf("Result: %i \n",ret);
+        printf("load: %i \n",load);
         // Part D - cleanup
         
         // wait for completed operations (should all have finished already)
-        ret = clFlush(command_queue);
+        
         ret = clFinish(command_queue);
         ret = clReleaseKernel(kernel);
         ret = clReleaseProgram(program);
         
         // free device memory
         ret = clReleaseMemObject(devVecA);
-        ret = clReleaseMemObject(devVecB);
-        ret = clReleaseMemObject(devVecC);
+        ret = clReleaseMemObject(devVecRet);
         
         // free management resources
         ret = clReleaseCommandQueue(command_queue);
@@ -169,19 +176,19 @@ int main(int argc, char** argv) {
     // ---------- check ----------    
     
     bool success = true;
-    for(long long i = 0; i<N; i++) {
-        if (c[i] == a[i] + b[i]) continue;
-        success = false;
-        break;
+    int result=0;
+    for(int i = 0; i<groups; i++) {
+	result+=res[i];
+	printf("teil: %f \n",res[i]);
+	
     }
-    
-    printf("Verification: %s\n", (success)?"OK":"FAILED");
+    printf("Result: %i, Soll: %lld \n",result,((N*N)+N)/2);
+
     
     // ---------- cleanup ----------
     
     free(a);
-    free(b);
-    free(c);
+    free(res);
     
     // done
     return (success) ? EXIT_SUCCESS : EXIT_FAILURE;
