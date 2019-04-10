@@ -1,5 +1,5 @@
 
-__kernel void count(__global float * A, __global float *output, __local float * target ) {
+__kernel void count(__global float * A, __global int *output, __local int * target ) {
         const size_t globalId = get_global_id(0);
         const size_t localId = get_local_id(0);
         target[localId] = A[globalId];
@@ -13,6 +13,7 @@ __kernel void count(__global float * A, __global float *output, __local float * 
                 if ((halfBlockSize*2)<blockSize) { // uneven block division
                     if (localId==0) { // when localID==0
                         target[localId] += target[localId + (blockSize-1)];
+			 
                     }
                 }
             }
