@@ -34,6 +34,10 @@ int main(int argc, char** argv) {
     if(argc >2){
 	groups=atoi(argv[2]);
     }
+    srand((unsigned) time(NULL));
+    if(argc >3){
+	srand(atoi(argv[3]));//give a random seed -> to replicate result
+    }
     printf("Computing vector-add with N=%lld\n", N);
     printf("With %d workgroups\n", groups);
     int load = N/groups;
@@ -53,9 +57,9 @@ int main(int argc, char** argv) {
     value_t* res = malloc(sizeof(value_t)*groups); //just to have an overhead full of 0s 
     value_t* a = malloc(sizeof(value_t)*M);
     
-    // fill vectors
+    // fill array
     for(long long i = 0; i<N; i++) {
-        a[i] = i+1;
+        a[i] = rand() % 2;
     }
     
 
@@ -158,8 +162,6 @@ int main(int argc, char** argv) {
         // 12) transfer data back to host
 	ret = clFlush(command_queue);
         ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(value_t)*groups, &res[0], 0, NULL, NULL);
-        printf("Result: %i \n",ret);
-        printf("load: %i \n",load);
         // Part D - cleanup
         
         // wait for completed operations (should all have finished already)
@@ -184,12 +186,24 @@ int main(int argc, char** argv) {
     
     bool success = true;
     int result=0;
+    long long cnt = 0;
+    for (int i = 0; i < N; i++) {
+        int entry = a[i];
+        if (entry == 1)
+            cnt++;
+    }
     for(int i = 0; i<groups; i++) {
 	result+=res[i];
-	printf("teil: %f \n",res[i]);
-	
     }
-    printf("Result: %i, Soll: %lld \n",result,((N*N)+N)/2);
+    if(result==cnt){
+	printf("validation OK \n");
+	success=true;
+    }else{
+	success=false;
+	printf("validation FALSE\n");
+    }
+    printf("Result: %i \n",result);
+    
 
     
     // ---------- cleanup ----------
