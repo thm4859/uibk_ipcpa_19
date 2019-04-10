@@ -5,6 +5,7 @@
 #include <CL/cl.h>
 
 #include "utils.h"
+#include "cl_utils.h"
 
 typedef float value_t;
 
@@ -18,6 +19,7 @@ typedef struct kernel_code {
 kernel_code loadCode(const char* filename);
 
 void releaseCode(kernel_code code);
+unsigned long long getElapsed(cl_event event);
 
 // -----------------------
 
@@ -25,9 +27,11 @@ void releaseCode(kernel_code code);
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    long long N = 100*1000*100;//actual problemsize
+    long long N = 100*1000*1000;//actual problemsize
     long long M = 2;//convenient roundup
     int groups=8;
+    cl_event event;
+    
     if (argc > 1) {
         N = atoll(argv[1]);
     }
@@ -68,7 +72,7 @@ int main(int argc, char** argv) {
     
 
     // ---------- compute ----------
-    
+    unsigned long long event_run_kernel = 0.0f;
    
     // --- OpenCL part ---
     timestamp begin = now();
@@ -101,7 +105,9 @@ int main(int argc, char** argv) {
         context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
         
         // 4) create command queue
-        command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+        //command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+        command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
+		CLU_ERRCHECK(ret, "Failed to enable CL_QUEUE_PROFILING_ENABLE on command queue");
 
 
 
@@ -110,6 +116,7 @@ int main(int argc, char** argv) {
         // 5) create memory buffers on device
         size_t vec_size = sizeof(value_t) * M;
         cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
+        CLU_ERRCHECK(ret, "Failed to create buffer for matrix A");
         cl_mem devVecRet = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(value_t)*groups, NULL, &ret);
 
         // 6) transfer input data from host to device (synchronously)
@@ -158,13 +165,13 @@ int main(int argc, char** argv) {
         size_t global_work_offset = 0;
         size_t global_work_size = M;
         size_t local_work_size = load;
-        ret = clEnqueueNDRangeKernel(command_queue, kernel, 
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 
                     1, &global_work_offset, &global_work_size, &local_work_size, 
-                    0, NULL, NULL
-        );
+                    0, NULL, &event
+        ), "Failed to enqueue 2D kernel");
 	
         // 12) transfer data back to host
-	ret = clFlush(command_queue);
+		ret = clFlush(command_queue);
         ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
         // Part D - cleanup
         
@@ -187,6 +194,10 @@ int main(int argc, char** argv) {
     printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
+    
+    //kernel runtime
+    event_run_kernel = getElapsed(event);
+    printf("Kernel time: %.3f ms\n", (event_run_kernel/1e6));
     
     bool success = true;
     int result=0;
@@ -241,4 +252,11 @@ kernel_code loadCode(const char* filename) {
 
 void releaseCode(kernel_code code) {
     free((char*)code.code);
+}
+
+unsigned long long getElapsed(cl_event event) {
+    cl_ulong starttime = 0, endtime = 0;
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &starttime, NULL), "Failed to get profiling information");
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &endtime, NULL), "Failed to get profiling information");
+	return (endtime-(unsigned long long)starttime);
 }
