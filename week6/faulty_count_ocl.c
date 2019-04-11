@@ -21,6 +21,7 @@ void releaseCode(kernel_code code);
 
 // -----------------------
 
+int calcLoad(int M);
 
 int main(int argc, char** argv) {
 
@@ -31,26 +32,18 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         N = atoll(argv[1]);
     }
-    if(argc >2){
-	groups=atoi(argv[2]);
-    }
     srand((unsigned) time(NULL));
     if(argc >3){
 	srand(atoi(argv[3]));//give a random seed -> to replicate result
     }
     printf("Computing vector-add with N=%lld\n", N);
     
-    int load = N/groups;
-    while(load>(1024)){ //this factors a lot of unknows -> localmemory on hardware, size of float and so on...
-	groups=groups*2;
-	load = N/groups;
-    }    
-    printf("With %d workgroups\n", groups);
-    
     while(M<N){
     	M=M*2;
     }
-    load = M/groups;
+    int load = calcLoad( M);
+    groups= M/load;
+    printf("With %d workgroups\n", groups);
     
     printf("M: %lld \n",M);
     // ---------- setup ----------
@@ -60,8 +53,12 @@ int main(int argc, char** argv) {
     int* a = malloc(sizeof(int)*M);
     
     // fill array
-    for(long long i = 0; i<N; i++) {
-        a[i] = rand() % 2;
+    for(long long i = 0; i<M; i++) {
+		if(i<N){
+			a[i] = rand() % 2;
+        }else{
+			a[i]=0;
+		}
     }
     
 
@@ -162,102 +159,83 @@ int main(int argc, char** argv) {
                     1, &global_work_offset, &global_work_size, &local_work_size, 
                     0, NULL, NULL
         );
-	 ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-	for(int i=0;i<groups;i++){
-		printf("%i\n",res[i]);
-	}
-	printf("%i_______________\n",groups);
-	//some other error occurs around 1 000 000 000
-	//so have it right now hardcoded at 3 flips
-		 global_work_offset = 0;
-		 global_work_size = groups;
-		 local_work_size = load;
-		if(groups<load){
-			groups=1;
-			local_work_size = 1;
-		}else{
-			groups=groups/load;//now its the new returnsize
-			if(groups==0){
-			    groups=1;
-			    local_work_size = 1;	
-			}
+        bool first = false;
+        if(groups==1){
+			ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+			first=true;
 		}
+	if(first==false){
+		M=groups;
+		load = calcLoad(M );
+			groups= M/load;
 		
-		cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_WRITE , sizeof(int)*groups, NULL, &ret);//2nd round return buffer
-		ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecRet);
-		ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecB);
-
-		ret = clEnqueueNDRangeKernel(command_queue, kernel, //so worst case this has reduces per factor 1 000 000 and has still 1 stage to go
-		            1, &global_work_offset, &global_work_size, &local_work_size, 
-		            0, NULL, NULL
-		);
-			 ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-		for(int i=0;i<groups;i++){
-			printf("%i\n",res[i]);
-		}
-		printf("%i_______________\n",groups);
-		if(groups!=1){ //checking the case that 1st reduction was already enough and second step just reduced by #group -> no third stage neccesary
-		//obviously somewhere here in either worksizes or bufferflags there must be an error because second readbuffer returns nothing (in print thats the old result)
-			global_work_offset = 0;
-		 	global_work_size = groups;
-		 	local_work_size = load;
-			if(groups<load){
-				groups=1;
-				local_work_size = 1;
-			}else{
-				groups=groups/load;
-				if(groups==0){
-				    groups=1;
-				    local_work_size = 1;
-				}	
-			}
-		
-		
-			cl_mem devVecC = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int)*groups, NULL, &ret);
-			ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecB);
-			ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecC);
-
-			ret = clEnqueueNDRangeKernel(command_queue, kernel, 
-		            1, &global_work_offset, &global_work_size, &local_work_size, 
-		            0, NULL, NULL
-			);
-				 ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-			for(int i=0;i<groups;i++){
-				printf("%i\n",res[i]);
-			}
-			printf("%i_______________\n",ret); //so no errorcode yet only the first element is used in second stages
-        		ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-			ret = clReleaseMemObject(devVecB);
-			ret = clReleaseMemObject(devVecC);
-
-		}else{
+		//some other error occurs around 1 000 000 000
+		//so have it right now hardcoded at 3 flips
+			 global_work_offset = 0;
+			 global_work_size = M;
+			 local_work_size = load;
 			
-		        ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-			ret = clReleaseMemObject(devVecB);
+			cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_WRITE , sizeof(int)*groups, NULL, &ret);//2nd round return buffer
+			ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecRet);
+			ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecB);
+				ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
+			ret = clEnqueueNDRangeKernel(command_queue, kernel, //so worst case this has reduces per factor 1 000 000 and has still 1 stage to go
+						1, &global_work_offset, &global_work_size, &local_work_size, 
+						0, NULL, NULL
+			);
+				 ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+			if(groups!=1){ //checking the case that 1st reduction was already enough and second step just reduced by #group -> no third stage neccesary
+			//obviously somewhere here in either worksizes or bufferflags there must be an error because second readbuffer returns nothing (in print thats the old result)
+				M=groups;
+				load = calcLoad(M );
+					groups= M/load;
+					global_work_offset = 0;
+				global_work_size = M;
+				local_work_size = load;
+				
+			
+				cl_mem devVecC = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int)*groups, NULL, &ret);
+				ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecB);
+				ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecC);
+
+				ret = clEnqueueNDRangeKernel(command_queue, kernel, 
+						1, &global_work_offset, &global_work_size, &local_work_size, 
+						0, NULL, NULL
+				);
+					 ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+					ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+				ret = clReleaseMemObject(devVecB);
+				ret = clReleaseMemObject(devVecC);
+
+			}else{
+				
+					ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+				ret = clReleaseMemObject(devVecB);
+			}
+			ret = clReleaseMemObject(devVecRet);
+		
+
+			// 12) transfer data back to host
+		ret = clFlush(command_queue);
+		
+			// Part D - cleanup
+			
+			// wait for completed operations (should all have finished already)
+			
+			ret = clFinish(command_queue);
+			ret = clReleaseKernel(kernel);
+			ret = clReleaseProgram(program);
+			
+			// free device memory
+			ret = clReleaseMemObject(devVecA);
+			
+			
+			// free management resources
+			ret = clReleaseCommandQueue(command_queue);
+			ret = clReleaseContext(context);
+
 		}
-		ret = clReleaseMemObject(devVecRet);
-	
-
-        // 12) transfer data back to host
-	ret = clFlush(command_queue);
-	
-        // Part D - cleanup
-        
-        // wait for completed operations (should all have finished already)
-        
-        ret = clFinish(command_queue);
-        ret = clReleaseKernel(kernel);
-        ret = clReleaseProgram(program);
-        
-        // free device memory
-        ret = clReleaseMemObject(devVecA);
-        
-        
-        // free management resources
-        ret = clReleaseCommandQueue(command_queue);
-        ret = clReleaseContext(context);
-
-    }
+	}
     timestamp end = now();
     printf("Total time: %.3f ms\n", (end-begin)*1000);
 
@@ -278,7 +256,7 @@ int main(int argc, char** argv) {
 	success=false;
 	printf("validation FALSE\n");
     }
-    printf("Result: %i vs %lld %i\n",res[0],cnt,groups);
+    printf("Result: %i vs %lld \n",res[0],cnt);
     
 
     
@@ -289,6 +267,14 @@ int main(int argc, char** argv) {
     
     // done
     return (success) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+int calcLoad(int M){
+	if(M>1024){
+		return 1024;
+	}else{
+		return M;
+	}
+
 }
 
 kernel_code loadCode(const char* filename) {
