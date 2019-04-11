@@ -1,5 +1,5 @@
 
-__kernel void count(__global float * A, __global int *output, __local int * target ) {
+__kernel void count(__global int * A, __global int *output, __local int * target ) {
         const size_t globalId = get_global_id(0);
         const size_t localId = get_local_id(0);
         target[localId] = A[globalId];
