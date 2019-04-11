@@ -3,7 +3,7 @@
 #include <math.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
-
+#include "cl_utils.h"
 #include "utils.h"
 
 typedef float value_t;
@@ -19,6 +19,8 @@ kernel_code loadCode(const char* filename);
 
 void releaseCode(kernel_code code);
 
+unsigned long long getElapsed(cl_event event);
+
 // -----------------------
 
 int calcLoad(int M);
@@ -26,7 +28,7 @@ int calcLoad(int M);
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    long long N = 10;//actual problemsize
+    long long N = 100000000;//actual problemsize
     long long M = 2;//convenient roundup
     int groups=8;
     if (argc > 1) {
@@ -63,7 +65,12 @@ int main(int argc, char** argv) {
     
 
     // ---------- compute ----------
-    
+    int kernel_events = 2;
+    if (M > 1024 *1024) {
+		kernel_events = 3;
+	}
+    cl_event events[kernel_events];
+    unsigned long long all_events_run_kernel = 0.0f;
    
     // --- OpenCL part ---
     timestamp begin = now();
@@ -96,7 +103,7 @@ int main(int argc, char** argv) {
         context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
         
         // 4) create command queue
-        command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+        command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
 
 
 
@@ -157,11 +164,11 @@ int main(int argc, char** argv) {
         size_t local_work_size = load;
         ret = clEnqueueNDRangeKernel(command_queue, kernel, 
                     1, &global_work_offset, &global_work_size, &local_work_size, 
-                    0, NULL, NULL
+                    0, NULL, &events[0]
         );
         bool first = false;
         if(groups==1){
-			ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+			ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, &events[1]);
 			first=true;
 		}
 	if(first==false){
@@ -181,7 +188,7 @@ int main(int argc, char** argv) {
 				ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
 			ret = clEnqueueNDRangeKernel(command_queue, kernel, //so worst case this has reduces per factor 1 000 000 and has still 1 stage to go
 						1, &global_work_offset, &global_work_size, &local_work_size, 
-						0, NULL, NULL
+						0, NULL, &events[1]
 			);
 				 ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
 			if(groups!=1){ //checking the case that 1st reduction was already enough and second step just reduced by #group -> no third stage neccesary
@@ -200,7 +207,7 @@ int main(int argc, char** argv) {
 
 				ret = clEnqueueNDRangeKernel(command_queue, kernel, 
 						1, &global_work_offset, &global_work_size, &local_work_size, 
-						0, NULL, NULL
+						0, NULL, &events[2]
 				);
 					 ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
 					ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
@@ -248,6 +255,15 @@ int main(int argc, char** argv) {
         if (entry == 1)
             cnt++;
     }
+
+
+	// calculate kernel time
+	for (int i = 0; i < kernel_events; i++){
+		all_events_run_kernel += getElapsed(events[i]);
+	}
+	printf("Kernel time: %.3f ms\n", (all_events_run_kernel/1e6));
+	
+
 
     if(res[0]==cnt){
 	printf("validation OK \n");
@@ -299,4 +315,11 @@ kernel_code loadCode(const char* filename) {
 
 void releaseCode(kernel_code code) {
     free((char*)code.code);
+}
+
+unsigned long long getElapsed(cl_event event) {
+    cl_ulong starttime = 0, endtime = 0;
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &starttime, NULL), "Failed to get profiling information");
+    CLU_ERRCHECK(clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &endtime, NULL), "Failed to get profiling information");
+	return (endtime-(unsigned long long)starttime);
 }

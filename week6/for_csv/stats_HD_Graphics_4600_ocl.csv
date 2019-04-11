@@ -1,0 +1,56 @@
+Computing vector-add with N=10
+With 1 workgroups
+M: 16 
+Total time: 117.292 ms
+Kernel time: 0.009 ms
+validation OK 
+Result: 5 vs 5 
+Computing vector-add with N=100
+With 1 workgroups
+M: 128 
+Total time: 121.590 ms
+Kernel time: 0.008 ms
+validation OK 
+Result: 54 vs 54 
+Computing vector-add with N=1000
+With 1 workgroups
+M: 1024 
+Total time: 137.642 ms
+Kernel time: 0.029 ms
+validation OK 
+Result: 477 vs 477 
+Computing vector-add with N=10000
+With 16 workgroups
+M: 16384 
+Total time: 140.134 ms
+Kernel time: 0.076 ms
+validation OK 
+Result: 4952 vs 4952 
+Computing vector-add with N=100000
+With 128 workgroups
+M: 131072 
+Total time: 131.848 ms
+Kernel time: 0.206 ms
+validation OK 
+Result: 49963 vs 49963 
+Computing vector-add with N=1000000
+With 1024 workgroups
+M: 1048576 
+Total time: 115.460 ms
+Kernel time: 1.273 ms
+validation OK 
+Result: 499654 vs 499654 
+Computing vector-add with N=10000000
+With 16384 workgroups
+M: 16777216 
+Total time: 180.312 ms
+Kernel time: 20.004 ms
+validation OK 
+Result: 5002401 vs 5002401 
+Computing vector-add with N=100000000
+With 131072 workgroups
+M: 134217728 
+Total time: 523.388 ms
+Kernel time: 161.742 ms
+validation OK 
+Result: 50006476 vs 50006476 

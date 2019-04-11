@@ -3,9 +3,8 @@
 #include <math.h>
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
-
-#include "utils.h"
 #include "cl_utils.h"
+#include "utils.h"
 
 typedef float value_t;
 
@@ -19,60 +18,59 @@ typedef struct kernel_code {
 kernel_code loadCode(const char* filename);
 
 void releaseCode(kernel_code code);
+
 unsigned long long getElapsed(cl_event event);
 
 // -----------------------
 
+int calcLoad(int M);
 
 int main(int argc, char** argv) {
 
     // 'parsing' optional input parameter = problem size
-    long long N = 100*1000*1000;//actual problemsize
+    long long N = 100000000;//actual problemsize
     long long M = 2;//convenient roundup
     int groups=8;
-    cl_event event;
-    
     if (argc > 1) {
         N = atoll(argv[1]);
     }
-    if(argc >2){
-	groups=atoi(argv[2]);
-    }
     srand((unsigned) time(NULL));
-    if(argc >3){
-	srand(atoi(argv[3]));//give a random seed -> to replicate result
+    if(argc >2){
+	srand(atoi(argv[2]));//give a random seed -> to replicate result
     }
-    //printf("Computing vector-add with N=%lld\n", N);
+    printf("Computing vector-add with N=%lld\n", N);
     
-    int load = N/groups;
-    while(load>(1024)){ //this factors a lot of unknows -> localmemory on hardware, size of float and so on...
-	groups=groups*2;
-	load = N/groups;
-    }    
-    //printf("With %d workgroups\n", groups);
-    if(N!=groups*load){
-	while(M<N){
-	    	M=M*2;
-	}
-	load = M/groups;
-    }else{
-	M=N;
+    while(M<N){
+    	M=M*2;
     }
-    //printf("M: %lld \n",M);
+    int load = calcLoad( M);
+    groups= M/load;
+    printf("With %d workgroups\n", groups);
+    
+    printf("M: %lld \n",M);
     // ---------- setup ----------
 
     // create two input vectors (on heap!)
     int* res = malloc(sizeof(int)*groups); //just to have an overhead full of 0s 
-    value_t* a = malloc(sizeof(value_t)*M);
+    int* a = malloc(sizeof(int)*M);
     
     // fill array
-    for(long long i = 0; i<N; i++) {
-        a[i] = rand() % 2;
+    for(long long i = 0; i<M; i++) {
+		if(i<N){
+			a[i] = rand() % 2;
+        }else{
+			a[i]=0;
+		}
     }
     
 
     // ---------- compute ----------
-    unsigned long long event_run_kernel = 0.0f;
+    int kernel_events = 2;
+    if (M > 1024 *1024) {
+		kernel_events = 3;
+	}
+    cl_event events[kernel_events];
+    unsigned long long all_events_run_kernel = 0.0f;
    
     // --- OpenCL part ---
     timestamp begin = now();
@@ -105,24 +103,20 @@ int main(int argc, char** argv) {
         context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
         
         // 4) create command queue
-        //command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
         command_queue = clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &ret);
-		CLU_ERRCHECK(ret, "Failed to enable CL_QUEUE_PROFILING_ENABLE on command queue");
 
 
 
         // Part B - data management
         
         // 5) create memory buffers on device
-        size_t vec_size = sizeof(value_t) * M;
-        cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, vec_size, NULL, &ret);
-        CLU_ERRCHECK(ret, "Failed to create buffer for devVecA");
-        cl_mem devVecRet = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(value_t)*groups, NULL, &ret);
-		CLU_ERRCHECK(ret, "Failed to create buffer for devVecRet");
+        size_t vec_size = sizeof(int) * M;
+        cl_mem devVecA = clCreateBuffer(context, CL_MEM_READ_WRITE , vec_size, NULL, &ret);
+        cl_mem devVecRet = clCreateBuffer(context, CL_MEM_READ_WRITE , sizeof(int)*groups, NULL, &ret);
 
         // 6) transfer input data from host to device (synchronously)
         ret = clEnqueueWriteBuffer(command_queue, devVecA, CL_TRUE, 0, vec_size, &a[0], 0, NULL, NULL);
-		CLU_ERRCHECK(ret, "Failed to write matrix A to device");
+
 
 
         // Part C - computation
@@ -133,7 +127,6 @@ int main(int argc, char** argv) {
         // 7) compile kernel program from source
         program = clCreateProgramWithSource(context, 1, &code.code,
 				                      (const size_t *)&code.size, &ret);
-		CLU_ERRCHECK(ret, "Failed to clCreateProgramWithSource()");
 
         // 8) build program (compile + link for device architecture)
         ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
@@ -156,85 +149,130 @@ int main(int argc, char** argv) {
 
         // 9) create OpenCL kernel
         kernel = clCreateKernel(program, "count", &ret);
-        CLU_ERRCHECK(ret, "Failed to create COUNT kernel from program");
-	
+	//ok one call reduces it to #groups -> if that is < load than 1 last call to get 1 number back
+	// otherwise take group as new input, and leave load the same
+
         // 10) set arguments
         ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecA);
-        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 0");
         ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecRet);
-        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 1");
         ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
-        CLU_ERRCHECK(ret, "Failed to clSetKernelArg 2");
-        //ret = clSetKernelArg(kernel, 3, sizeof(int), &M);
-        //CLU_ERRCHECK(ret, "Failed to clSetKernelArg 3");
+
 
         // 11) schedule kernel
         size_t global_work_offset = 0;
         size_t global_work_size = M;
         size_t local_work_size = load;
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 
+        ret = clEnqueueNDRangeKernel(command_queue, kernel, 
                     1, &global_work_offset, &global_work_size, &local_work_size, 
-                    0, NULL, &event
-        ), "Failed to enqueue 2D kernel");
-	
-        // 12) transfer data back to host
-		ret = clFlush(command_queue);
-		CLU_ERRCHECK(ret, "Failed to clFlush(command_queue)");
-        ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
-        CLU_ERRCHECK(ret, "Failed to clEnqueueReadBuffer()");
-        
-        // Part D - cleanup
-        
-        // wait for completed operations (should all have finished already)
-        
-        ret = clFinish(command_queue);
-        CLU_ERRCHECK(ret, "Failed to flush command queue");
-        ret = clReleaseKernel(kernel);
-        CLU_ERRCHECK(ret, "Failed to release kernel");
-        ret = clReleaseProgram(program);
-        CLU_ERRCHECK(ret, "Failed to release program");
-        
-        // free device memory
-        ret = clReleaseMemObject(devVecA);
-        CLU_ERRCHECK(ret, "Failed to release devVecA");
-        ret = clReleaseMemObject(devVecRet);
-        CLU_ERRCHECK(ret, "Failed to release devVecRet");
-        
-        // free management resources
-        ret = clReleaseCommandQueue(command_queue);
-        CLU_ERRCHECK(ret, "Failed to release command queue");
-        ret = clReleaseContext(context);
-        CLU_ERRCHECK(ret, "Failed to release OpenCL context");
+                    0, NULL, &events[0]
+        );
+        bool first = false;
+        if(groups==1){
+			ret = clEnqueueReadBuffer(command_queue, devVecRet, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, &events[1]);
+			first=true;
+		}
+	if(first==false){
+		M=groups;
+		load = calcLoad(M );
+			groups= M/load;
+		
+		//some other error occurs around 1 000 000 000
+		//so have it right now hardcoded at 3 flips
+			 global_work_offset = 0;
+			 global_work_size = M;
+			 local_work_size = load;
+			
+			cl_mem devVecB = clCreateBuffer(context, CL_MEM_READ_WRITE , sizeof(int)*groups, NULL, &ret);//2nd round return buffer
+			ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecRet);
+			ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecB);
+				ret = clSetKernelArg(kernel, 2, sizeof(int)*load, NULL);
+			ret = clEnqueueNDRangeKernel(command_queue, kernel, //so worst case this has reduces per factor 1 000 000 and has still 1 stage to go
+						1, &global_work_offset, &global_work_size, &local_work_size, 
+						0, NULL, &events[1]
+			);
+				 ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+			if(groups!=1){ //checking the case that 1st reduction was already enough and second step just reduced by #group -> no third stage neccesary
+			//obviously somewhere here in either worksizes or bufferflags there must be an error because second readbuffer returns nothing (in print thats the old result)
+				M=groups;
+				load = calcLoad(M );
+					groups= M/load;
+					global_work_offset = 0;
+				global_work_size = M;
+				local_work_size = load;
+				
+			
+				cl_mem devVecC = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int)*groups, NULL, &ret);
+				ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devVecB);
+				ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devVecC);
 
-    }
+				ret = clEnqueueNDRangeKernel(command_queue, kernel, 
+						1, &global_work_offset, &global_work_size, &local_work_size, 
+						0, NULL, &events[2]
+				);
+					 ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+					ret = clEnqueueReadBuffer(command_queue, devVecC, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+				ret = clReleaseMemObject(devVecB);
+				ret = clReleaseMemObject(devVecC);
+
+			}else{
+				
+					ret = clEnqueueReadBuffer(command_queue, devVecB, CL_TRUE, 0, sizeof(int)*groups, &res[0], 0, NULL, NULL);
+				ret = clReleaseMemObject(devVecB);
+			}
+			ret = clReleaseMemObject(devVecRet);
+		
+
+			// 12) transfer data back to host
+		ret = clFlush(command_queue);
+		
+			// Part D - cleanup
+			
+			// wait for completed operations (should all have finished already)
+			
+			ret = clFinish(command_queue);
+			ret = clReleaseKernel(kernel);
+			ret = clReleaseProgram(program);
+			
+			// free device memory
+			ret = clReleaseMemObject(devVecA);
+			
+			
+			// free management resources
+			ret = clReleaseCommandQueue(command_queue);
+			ret = clReleaseContext(context);
+
+		}
+	}
     timestamp end = now();
-    //printf("Total time: %.3f ms\n", (end-begin)*1000);
+    printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
     
-    //kernel runtime
-    event_run_kernel = getElapsed(event);
-    //printf("Kernel time: %.3f ms\n", (event_run_kernel/1e6));
-    
     bool success = true;
-    int result=0;
     long long cnt = 0;
     for (int i = 0; i < N; i++) {
         int entry = a[i];
         if (entry == 1)
             cnt++;
     }
-    for(int i = 0; i<groups; i++) {
-	result+=res[i];
-    }
-    if(result==cnt){
-	//printf("validation OK \n");
+
+
+	// calculate kernel time
+	for (int i = 0; i < kernel_events; i++){
+		all_events_run_kernel += getElapsed(events[i]);
+	}
+	printf("Kernel time: %.3f ms\n", (all_events_run_kernel/1e6));
+	
+
+
+    if(res[0]==cnt){
+	printf("validation OK \n");
 	success=true;
     }else{
 	success=false;
-	//printf("validation FALSE\n");
+	printf("validation FALSE\n");
     }
-    //printf("Result: %i \n",result);
+    printf("Result: %i vs %lld \n",res[0],cnt);
     
 
     
@@ -245,6 +283,14 @@ int main(int argc, char** argv) {
     
     // done
     return (success) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+int calcLoad(int M){
+	if(M>1024){
+		return 1024;
+	}else{
+		return M;
+	}
+
 }
 
 kernel_code loadCode(const char* filename) {
