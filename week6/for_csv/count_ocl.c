@@ -30,24 +30,26 @@ int main(int argc, char** argv) {
     // 'parsing' optional input parameter = problem size
     long long N = 100000000;//actual problemsize
     long long M = 2;//convenient roundup
+    long seed;
     int groups=8;
     if (argc > 1) {
         N = atoll(argv[1]);
     }
     srand((unsigned) time(NULL));
     if(argc >2){
-	srand(atoi(argv[2]));//give a random seed -> to replicate result
+        seed = atol(argv[2]);
+        srand((unsigned) seed);//give a random seed -> to replicate result
     }
-    printf("Computing vector-add with N=%lld\n", N);
+    //printf("Computing vector-add with N=%lld\n", N);
     
     while(M<N){
     	M=M*2;
     }
     int load = calcLoad( M);
     groups= M/load;
-    printf("With %d workgroups\n", groups);
+    //printf("With %d workgroups\n", groups);
     
-    printf("M: %lld \n",M);
+    //printf("M: %lld \n",M);
     // ---------- setup ----------
 
     // create two input vectors (on heap!)
@@ -244,7 +246,7 @@ int main(int argc, char** argv) {
 		}
 	}
     timestamp end = now();
-    printf("Total time: %.3f ms\n", (end-begin)*1000);
+    //printf("Total time: %.3f ms\n", (end-begin)*1000);
 
     // ---------- check ----------    
     
@@ -261,20 +263,20 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < kernel_events; i++){
 		all_events_run_kernel += getElapsed(events[i]);
 	}
-	printf("Kernel time: %.3f ms\n", (all_events_run_kernel/1e6));
+	//printf("Kernel time: %.3f ms\n", (all_events_run_kernel/1e6));
 	
 
 
     if(res[0]==cnt){
-	printf("validation OK \n");
+	//printf("validation OK \n");
 	success=true;
     }else{
 	success=false;
-	printf("validation FALSE\n");
+	//printf("validation FALSE\n");
     }
-    printf("Result: %i vs %lld \n",res[0],cnt);
+    //printf("Result: %i vs %lld \n",res[0],cnt);
     
-
+    printf("%lld, %ld, %.3f, \n", N, seed, all_events_run_kernel/1e6);
     
     // ---------- cleanup ----------
     
