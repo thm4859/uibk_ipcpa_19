@@ -33,8 +33,8 @@ int main(int argc, char** argv) {
         N = atoll(argv[1]);
     }
     srand((unsigned) time(NULL));
-    if(argc >3){
-	srand(atoi(argv[3]));//give a random seed -> to replicate result
+    if(argc >2){
+	srand(atoi(argv[2]));//give a random seed -> to replicate result
     }
     printf("Computing vector-add with N=%lld\n", N);
     
