@@ -44,8 +44,8 @@ __kernel void level(
     }
     
     // write result to global result buffer
-    result[get_group_id(0)] = scratch[local_index];
-    result[get_group_id(0) + W] = scratch[local_index + W];
+    result[(2*W*get_group_id(0))+local_index] = scratch[local_index];
+    result[(2*W*get_group_id(0))+local_index + W] = scratch[local_index + W];
     
 }
 
