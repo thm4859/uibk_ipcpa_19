@@ -28,7 +28,6 @@ int main(int argc, char** argv) {
     printf("Loading input file %s ..\n", input_file_name);
     int width, height, components;
     unsigned char *data = stbi_load(input_file_name, &width, &height, &components, 0);
-    //int data[] = (int)data_char;
     size_t N = width * height * components;    
     printf("Loaded image of size %dx%d with %d components.\n", width,height,components);
 
@@ -92,7 +91,7 @@ int main(int argc, char** argv) {
 
 
     printf("Counting ...\n");
-    int count = 0;
+	unsigned char *result;
 
     {
         // - setup -
@@ -101,7 +100,7 @@ int main(int argc, char** argv) {
 		size_t elements_to_check = 10; // min value = 3 (one work_group calculates min and max of 10 following elements of a component)
 
 		size_t resulting_elements = 6; // 6 elements are remaining (max and min of the (3) components)		
-		
+				
 		
     
 		//test roundUpToMultipleOf3
@@ -149,9 +148,11 @@ int main(int argc, char** argv) {
 			
             //test
 			if (curLength < 100) {
-				for(int i =0; i<curLength; i++){
-					printf("%d = %d\n",i, data[i]);
-				}
+//				err = clEnqueueReadBuffer(command_queue, devDataA, CL_TRUE, 0, sizeof(unsigned char), &result, 0, NULL, NULL);
+//				CLU_ERRCHECK(err, "Failed to download result from device");
+//				for(int i =0; i<curLength; i++){
+//					printf("%d = %d\n",i, result);
+//				}
 			}	
 					
             // perform one stage of the reduction
@@ -191,8 +192,9 @@ int main(int argc, char** argv) {
 
         
         // download result from device
-        err = clEnqueueReadBuffer(command_queue, devDataA, CL_TRUE, 0, sizeof(int), &count, 0, NULL, NULL);
+        err = clEnqueueReadBuffer(command_queue, devDataA, CL_TRUE, 0, sizeof(unsigned char) * 6, &result, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to download result from device");
+
 
         // Part 7: cleanup
         // wait for completed operations (there should be none)
@@ -212,8 +214,8 @@ int main(int argc, char** argv) {
     
     //write ocl output to array
     for(int c = 0; c<components; c++) {
-      min_val[c] = data[c];
-      max_val[c] = data[c + components];
+      min_val[c] = result[c];
+      max_val[c] = result[c + components];
     }    
       sum[0] = 126;
       sum[1] = 147;
