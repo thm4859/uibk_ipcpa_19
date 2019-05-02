@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
     float *max_fac = (float*)malloc(components*sizeof(float));
     for (int i = 0; i < N; i++) {
 		data[i] = (unsigned long)data_uchar[i];
-		data_float [i] = (float_t)data_uchar[i];
+		data_float [i] = (float)data_uchar[i];
 	}
 	
     
