@@ -37,15 +37,20 @@ int main(int argc, char** argv) {
     size_t comp = (size_t)components; 
     unsigned char *data_result = (unsigned char*)malloc(N*sizeof(unsigned char));    
     unsigned long *data = (unsigned long*)malloc(N*sizeof(unsigned long));
+
+    float *data_float = (float*)malloc(N*sizeof(float));
+    float *min_fac = (float*)malloc(components*sizeof(float));
+    float *max_fac = (float*)malloc(components*sizeof(float));
     for (int i = 0; i < N; i++) {
 		data[i] = (unsigned long)data_uchar[i];
+		data_float [i] = (float_t)data_uchar[i];
 	}
 	
     
     
     printf("Loaded image of size %dx%d with %d components.\n", width,height,components);
 
-	printf("erstes element: %lu\n", data[0]);
+	//printf("erstes element: %lu\n", data[0]);
 	
 	
     // start the timer
@@ -57,12 +62,16 @@ int main(int argc, char** argv) {
     unsigned char min_val[components];
     unsigned char max_val[components];
     unsigned char avg_val[components];
+    float avg_val_float [components];
+    for (int i = 0; i < components; i++) {
+		avg_val_float [i] = (float)avg_val[i];
+	}
 
     // an auxilary array for computing the average
     unsigned long long sum[components];
     size_t work_group_size = 30; 
 	size_t elements_to_check = 10; // min value = 3 (one work_group calculates min and max of 10 following elements of a component)
-	
+	float *data_res_float = (float*)malloc(roundUpToMultipleOfx(N,components,elements_to_check)*sizeof(float));
     // initialize
     for(int c = 0; c<components; c++) {
       min_val[c] = 255;
@@ -330,13 +339,14 @@ int main(int argc, char** argv) {
 
     
     // compute average and multiplicative factors
-    float min_fac[components];
-    float max_fac[components];
+    //float min_fac[components];
+    //float max_fac[components];
     for(int c=0; c<components; ++c) {
-      avg_val[c] = sum[c]/((unsigned long long)width*height);
-      min_fac[c] = (float)avg_val[c] / (float)(avg_val[c] - min_val[c]);
-      max_fac[c] = (255.0f-(float)avg_val[c]) / (float)(max_val[c] - avg_val[c]);
-      printf("\tComponent %d: %3u / %3u / %3u * %3.2f / %3.2f\n", c, min_val[c], avg_val[c], max_val[c], min_fac[c], max_fac[c]);
+		avg_val_float[c] = (float)sum[c]/((unsigned long long)width*height);
+		avg_val[c] = sum[c]/((unsigned long long)width*height);
+		min_fac[c] = (float)avg_val[c] / (float)(avg_val[c] - min_val[c]);
+		max_fac[c] = (255.0f-(float)avg_val[c]) / (float)(max_val[c] - avg_val[c]);
+		printf("\tComponent %d: %3u / %3u / %3u * %3.2f / %3.2f\n", c, min_val[c], avg_val[c], max_val[c], min_fac[c], max_fac[c]);
     }
     
 
@@ -354,17 +364,8 @@ int main(int argc, char** argv) {
 
     {
         // - setup -
-		size_t global_size = N;		
-		float min1 = min_fac[0];
-		float min2 = min_fac[1];
-		float min3 = min_fac[2];
-		float max1 = max_fac[0];
-		float max2 = max_fac[1];
-		float max3 = max_fac[2];
-		unsigned char avg1 = avg_val[0];
-		unsigned char avg2 = avg_val[1];
-		unsigned char avg3 = avg_val[2];
-		
+		//size_t global_size = N;	
+		size_t global_size = roundUpToMultipleOfx(N,components,elements_to_check);	
 		
         // Part 1: ocl initialization
         cl_context context;
@@ -373,30 +374,30 @@ int main(int argc, char** argv) {
 
         // Part 2: create memory buffers
         cl_int err;
-        cl_mem devDataA = clCreateBuffer(context, CL_MEM_READ_WRITE, N * sizeof(unsigned char), NULL, &err);
+        cl_mem devDataA = clCreateBuffer(context, CL_MEM_READ_WRITE, global_size * sizeof(float), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array devDataA");
 		
         cl_mem devDataB = clCreateBuffer(context, CL_MEM_READ_WRITE, N * sizeof(unsigned char), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array devDataB");
  
-        cl_mem dev_min_fac = clCreateBuffer(context, CL_MEM_READ_WRITE, components * sizeof(float), NULL, &err);
+        cl_mem dev_min_fac = clCreateBuffer(context, CL_MEM_READ_ONLY, components * sizeof(float), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array dev_min_fac");
         
-        cl_mem dev_max_fac = clCreateBuffer(context, CL_MEM_READ_WRITE, components * sizeof(float), NULL, &err);
+        cl_mem dev_max_fac = clCreateBuffer(context, CL_MEM_READ_ONLY, components * sizeof(float), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array dev_max_fac");
         
-        cl_mem def_avg_val = clCreateBuffer(context, CL_MEM_READ_WRITE, components * sizeof(unsigned char), NULL, &err);
+        cl_mem dev_avg_val = clCreateBuffer(context, CL_MEM_READ_ONLY, components * sizeof(float), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array ddef_avg_val"); 
 
 
         // Part 3: fill memory buffers (transferring A is enough, B can be anything)
-        err = clEnqueueWriteBuffer(command_queue, devDataA, CL_TRUE, 0, N * sizeof(unsigned char), data, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(command_queue, devDataA, CL_TRUE, 0, global_size * sizeof(float), data_float, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
         err = clEnqueueWriteBuffer(command_queue, dev_min_fac, CL_TRUE, 0, components * sizeof(float), min_fac, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
         err = clEnqueueWriteBuffer(command_queue, dev_max_fac, CL_TRUE, 0, components * sizeof(float), max_fac, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
-        err = clEnqueueWriteBuffer(command_queue, def_avg_val, CL_TRUE, 0, components * sizeof(unsigned char), avg_val, 0, NULL, NULL);
+        err = clEnqueueWriteBuffer(command_queue, dev_avg_val, CL_TRUE, 0, components * sizeof(float), avg_val_float, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
 
         // Part 4: create kernel from source
@@ -409,46 +410,26 @@ int main(int argc, char** argv) {
         timestamp begin_adjust = now();
             
         // for debugging:
-        //printf("CurLength: %lu, Global: %lu, WorkGroup: %lu, elements_to_check: %lu\n", curLength, global_size, work_group_size, elements_to_check);
+        printf("Data-dimension: %ld, Global: %lu, WorkGroup: %lu, elements_to_check: %lu\n", N, global_size, work_group_size, elements_to_check);
         
         // update kernel parameters
         err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &devDataA);
         CLU_ERRCHECK(err, "Failed to write clSetKernelArg 0");
         err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &devDataB);
 		CLU_ERRCHECK(err, "Failed to write clSetKernelArg 1");
-        //err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &min_fac);
-        //CLU_ERRCHECK(err, "Failed to write clSetKernelArg 2");
-        //err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &max_fac);
-        //CLU_ERRCHECK(err, "Failed to write clSetKernelArg 3");
-        //err = clSetKernelArg(kernel, 4, sizeof(cl_mem), &avg_val);  
-        //CLU_ERRCHECK(err, "Failed to write clSetKernelArg 4");      
-        err = clSetKernelArg(kernel, 2, components * elements_to_check * sizeof(unsigned char), NULL);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 5");
-        err = clSetKernelArg(kernel, 3, sizeof(size_t), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        
-        err = clSetKernelArg(kernel, 4, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 5, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 6, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 7, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 8, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 9, sizeof(float), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 10, sizeof(unsigned char), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 11, sizeof(unsigned char), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        err = clSetKernelArg(kernel, 12, sizeof(unsigned char), &components);
-        CLU_ERRCHECK(err, "Failed to clSetKernelArg 6");
-        
-        
-        
-        
+        err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &dev_min_fac);
+        CLU_ERRCHECK(err, "Failed to write clSetKernelArg 2");
+        err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &dev_max_fac);
+        CLU_ERRCHECK(err, "Failed to write clSetKernelArg 3");
+        err = clSetKernelArg(kernel, 4, sizeof(cl_mem), &dev_avg_val);  
+        CLU_ERRCHECK(err, "Failed to write clSetKernelArg 4");      
+        err = clSetKernelArg(kernel, 5, components * elements_to_check * sizeof(float), NULL);
+        CLU_ERRCHECK(err, "Failed to write clSetKernelArg 5");
+        err = clSetKernelArg(kernel, 6, sizeof(size_t), &components);
+        CLU_ERRCHECK(err, "Failed to write clSetKernelArg 6");
+        err = clSetKernelArg(kernel, 7, sizeof(size_t), &N);
+
+
                 
         // submit kernel
         CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue adjust kernel");
@@ -465,9 +446,14 @@ int main(int argc, char** argv) {
         
         
         // download result from device
-        err = clEnqueueReadBuffer(command_queue, devDataA, CL_TRUE, 0, N * sizeof(cl_uchar), &data_result, 0, NULL, NULL);
+        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N * sizeof(cl_uchar), &data_result, 0, NULL, NULL);
+        printf("ERRORCODE = %d\n", err);
         CLU_ERRCHECK(err, "Failed to download result from device");
-
+		
+		
+		//for (int i = 0; i < N; i+100000) {
+		//	printf("res: %f3.0\n", data_res_float[i]);
+		//}
 
 
         // Part 7: cleanup
@@ -516,14 +502,15 @@ int main(int argc, char** argv) {
     }
 */
 
-	printf("ocl-time: %f ms\n", time_min_max + time_sum + time_adjust);
+	//printf("ocl-time: %f ms\n", time_min_max + time_sum + time_adjust);
 
     // ------ Store Image ------
 
     printf("Writing output image %s ...\n", output_file_name);
-    stbi_write_png(output_file_name,width,height,components,data_uchar,width*components);
+    stbi_write_png(output_file_name,width,height,components,data_result,width*components);
     stbi_image_free(data_uchar);
     free(data);
+    free(data_float);
     free(data_result);
 
     printf("Done!\n");
