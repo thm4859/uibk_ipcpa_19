@@ -1,13 +1,13 @@
 
 __kernel void adjust(
     __global float* data,      // the vector to be reduced
-    __global float* result,    // the result vector
+    __global uchar* result,    // the result vector
     __global float* min_fac,                  // array with x elements (components) 
     __global float* max_fac,                  // array with x elements (components)
     __global float* avg_val,				  // array with average values of the components    
     __local  float* scratch,   				  // a local scratch memory buffer (= 30)
     long C,							 		  // # components
-    long N											//dim of png-data array
+    long N									  //dim of png-data array
 ) {
 
     // get Ids
@@ -36,8 +36,11 @@ __kernel void adjust(
     
     // write result to global result buffer
 	if(global_index < N) {
-		result[global_index] = (unsigned char)scratch[local_index];
-		//result[(get_group_id(0)*get_local_size(0))+ local_index] = (unsigned char) scratch[local_index];
+		result[global_index] = convert_uchar(scratch[local_index]);
+		//result[(get_group_id(0)*get_local_size(0))+ local_index] = convert_uchar(scratch[local_index]);
+		
+		//result[global_index] = (unsigned char)scratch[local_index];
+		//result[(get_group_id(0)*get_local_size(0))+ local_index] = (uchar) scratch[local_index];
 	}
 
 }

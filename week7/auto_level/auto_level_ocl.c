@@ -35,15 +35,16 @@ int main(int argc, char** argv) {
     float time_min_max = 0.0f, time_sum = 0.0f, time_adjust = 0.00f;
     size_t N = width * height * components; 
     size_t comp = (size_t)components; 
-    unsigned char *data_result = (unsigned char*)malloc(N*sizeof(unsigned char));    
-    unsigned long *data = (unsigned long*)malloc(N*sizeof(unsigned long));
-
+    
+    unsigned long *data = (unsigned long*)malloc(N*sizeof(unsigned long));			//used for: "max and min" and "sum" to fill devDataA (-> filled im line 44+)
     float *data_float = (float*)malloc(N*sizeof(float));
+    
     float *min_fac = (float*)malloc(components*sizeof(float));
     float *max_fac = (float*)malloc(components*sizeof(float));
     for (int i = 0; i < N; i++) {
-		data[i] = (unsigned long)data_uchar[i];
-		data_float [i] = (float_t)data_uchar[i];
+		data[i] = (unsigned long)data_uchar[i];					//used for: "max and min" and "sum" to fill devDataA
+		data_float [i] = (float)data_uchar[i];					//used for: "adjust" to fill devDataA
+		
 	}
 	
     
@@ -71,7 +72,7 @@ int main(int argc, char** argv) {
     unsigned long long sum[components];
     size_t work_group_size = 30; 
 	size_t elements_to_check = 10; // min value = 3 (one work_group calculates min and max of 10 following elements of a component)
-	float *data_res_float = (float*)malloc(roundUpToMultipleOfx(N,components,elements_to_check)*sizeof(float));
+	float *data_res_float = (float*)malloc(roundUpToMultipleOfx(N,components,elements_to_check)*sizeof(float)); 		//not used at the moment
     // initialize
     for(int c = 0; c<components; c++) {
       min_val[c] = 255;
@@ -85,7 +86,7 @@ int main(int argc, char** argv) {
 
     printf("\n\n...Computing min max of png-data ...\n");
 	unsigned long min_max[components * 2];
-
+	
     {
         // - setup -
 		size_t resulting_elements = 6; // 6 elements are remaining (max and min of the (3) components)		
@@ -215,15 +216,6 @@ int main(int argc, char** argv) {
 
 
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     
     // ---------- compute sum of png-data----------
@@ -363,6 +355,7 @@ int main(int argc, char** argv) {
     printf("\n\n...Computing adjust of png-data ...\n");
 
     {
+		
         // - setup -
 		//size_t global_size = N;	
 		size_t global_size = roundUpToMultipleOfx(N,components,elements_to_check);	
@@ -374,7 +367,7 @@ int main(int argc, char** argv) {
 
         // Part 2: create memory buffers
         cl_int err;
-        cl_mem devDataA = clCreateBuffer(context, CL_MEM_READ_WRITE, global_size * sizeof(float), NULL, &err);
+        cl_mem devDataA = clCreateBuffer(context, CL_MEM_READ_WRITE, global_size * sizeof(unsigned long), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array devDataA");
 		
         cl_mem devDataB = clCreateBuffer(context, CL_MEM_READ_WRITE, N * sizeof(unsigned char), NULL, &err);
@@ -437,7 +430,7 @@ int main(int argc, char** argv) {
                 
         //for error testing
 		err = clFinish(command_queue);
-		printf("ERRORCODE = %d\n", err);
+		//printf("ERRORCODE = %d\n", err);
         
         //clFinish(command_queue);
         timestamp end_adjust = now();
@@ -447,8 +440,8 @@ int main(int argc, char** argv) {
         
         
         // download result from device
-        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N * sizeof(cl_uchar), &data_result, 0, NULL, NULL);
-        printf("ERRORCODE = %d\n", err);
+        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N * sizeof(cl_uchar), data_uchar, 0, NULL, NULL);
+        //printf("ERRORCODE = %d\n", err);
         CLU_ERRCHECK(err, "Failed to download result from device");
 		
 		
@@ -471,49 +464,21 @@ int main(int argc, char** argv) {
         // free management resources
         CLU_ERRCHECK(clReleaseCommandQueue(command_queue), "Failed to release command queue");
         CLU_ERRCHECK(clReleaseContext(context),            "Failed to release OpenCL context");
-        
-        
-        
+       
     }
 
 
-
-
-
-
-
-
-
-
-
-    
-/*
-    // ------ Adjust Image ------
-
-    for(int x=0; x<width; ++x) {
-      for(int y=0; y<height; ++y) {
-        for(int c=0; c<components; ++c) {
-          int index = c + x*components + y*width*components;
-          unsigned char val = data_uchar[index];
-          float v = (float)(val - avg_val[c]);
-          v *= (val < avg_val[c]) ? min_fac[c] : max_fac[c];
-          data_uchar[index] = (unsigned char)(v + avg_val[c]);
-        }
-      }
-    }
-*/
 
 	//printf("ocl-time: %f ms\n", time_min_max + time_sum + time_adjust);
 
     // ------ Store Image ------
 
     printf("Writing output image %s ...\n", output_file_name);
-    stbi_write_png(output_file_name,width,height,components,data_result,width*components);
+    stbi_write_png(output_file_name,width,height,components,data_uchar,width*components);
     stbi_image_free(data_uchar);
     free(data);
     free(data_float);
-    free(data_result);
-
+   
     printf("Done!\n");
 
     // done
