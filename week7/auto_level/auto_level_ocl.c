@@ -42,14 +42,13 @@ int main(int argc, char** argv) {
     float *min_fac = (float*)malloc(components*sizeof(float));
     float *max_fac = (float*)malloc(components*sizeof(float));
     for (int i = 0; i < N; i++) {
-<<<<<<< HEAD
+
 		data[i] = (unsigned long)data_uchar[i];					//used for: "max and min" and "sum" to fill devDataA
 		data_float [i] = (float)data_uchar[i];					//used for: "adjust" to fill devDataA
 		
-=======
 		data[i] = (unsigned long)data_uchar[i];
 		data_float [i] = (float)data_uchar[i];
->>>>>>> 21123ffbe1d3364dad48db6f38fb4a2724da7d7c
+
 	}
 	
     
