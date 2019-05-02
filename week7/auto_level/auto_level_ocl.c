@@ -443,6 +443,7 @@ int main(int argc, char** argv) {
         timestamp end_adjust = now();
         time_min_max = (end_adjust-begin_adjust)*1000;
         printf("\tADJUST: took: %.3f ms\n", (end_adjust-begin_adjust)*1000);
+        printf("\t---ocl-time: %.3f ms---\n", time_min_max + time_sum + time_adjust);
         
         
         // download result from device

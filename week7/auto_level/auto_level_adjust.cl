@@ -25,30 +25,19 @@ __kernel void adjust(
     barrier(CLK_LOCAL_MEM_FENCE);
     
     // perform adjustment
-    int component =  local_index % C;   
-    if (component == 0) {
+    int component = local_index % C;   
+
 		float difference = (scratch[local_index] - avg_val[component]);
-		difference *= (difference < avg_val[component]) ? min_fac[component] : max_fac[component];
+		difference *= (scratch[local_index] < avg_val[component]) ? min_fac[component] : max_fac[component];
 		scratch[local_index] = (difference + avg_val[component]);
-    }
-    if (component == 1) {
-		float difference = (scratch[local_index] - avg_val[component]);
-		difference *= (difference < avg_val[component]) ? min_fac[component] : max_fac[component];
-		scratch[local_index] = (difference + avg_val[component]);
-    }
-    if (component == 2) {
-		float difference = (scratch[local_index] - avg_val[component]);
-		difference *= (difference < avg_val[component]) ? min_fac[component] : max_fac[component];
-		scratch[local_index] = (difference + avg_val[component]);
-    }
     
     // sync on local memory state
     barrier(CLK_LOCAL_MEM_FENCE);
     
     // write result to global result buffer
-	//result[(get_group_id(0)*get_local_size(0))+ local_index] = (unsigned char) scratch[local_index];
 	if(global_index < N) {
-		result[global_index] = scratch[local_index];
+		result[global_index] = (unsigned char)scratch[local_index];
+		//result[(get_group_id(0)*get_local_size(0))+ local_index] = (unsigned char) scratch[local_index];
 	}
 
 }
