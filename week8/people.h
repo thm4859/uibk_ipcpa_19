@@ -75,7 +75,7 @@ void generate_list(person_t** list, long seed, int entries) {
     // seed the random generator
     srand((unsigned) seed);
     for (int i = 0; i < entries; i++) {
-        (*list)[i].age = random(1, MAX_AGE);
+        (*list)[i].age = random(0, MAX_AGE);
         gen_name((*list)[i].name);
     }
 }
@@ -84,4 +84,40 @@ void print_list(person_t* list, int entries) {
     for (int i = 0; i < entries; i++) {
         printf("%d | %s\n", list[i].age, list[i].name);
     }
+}
+
+person_t *copy_list(person_t* list, int n) {
+    person_t* A = (person_t*)malloc(sizeof(person_t)*n);
+    for (int i = 0; i < n; i++) {
+        strcpy(A[i].name, list[i].name);
+        A[i].age = list[i].age;
+    }
+    return A;
+}
+
+person_t* count_sort(person_t* list, int n) {
+    // start algorithm
+    int k = MAX_AGE+1;
+    person_t* A = list;
+    int* C = malloc(sizeof(int)*k);
+    // init C
+    for (int i = 0; i < k; i++) {
+        C[i] = 0;
+    }
+    // create histogram
+    for (int i = 0; i < n; i++) {
+        C[A[i].age] += 1;
+    }
+    // calculate address (prefix sum shifted)
+    for (int i = 1; i < k; i++) {
+        C[i] += C[i-1];
+    }
+    // B
+    person_t* B = (person_t*)malloc(sizeof(person_t)*n);
+    // copy each a value to b with position from c
+    for (int i = 0; i < n; i++) {
+        C[A[i].age] -= 1;
+        B[C[A[i].age]] = A[i];
+    }
+    return B;
 }
