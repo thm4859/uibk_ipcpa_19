@@ -64,3 +64,24 @@ void gen_name(name_t buffer) {
 		first_names[rand()%first_name_count], 
 		last_names[rand()%last_name_count]);
 }
+
+int random(int min, int max){
+   return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+}
+
+void generate_list(person_t** list, long seed, int entries) {
+    // allocate a list of N persons
+    *list = (person_t*)malloc(sizeof(person_t)*entries);
+    // seed the random generator
+    srand((unsigned) seed);
+    for (int i = 0; i < entries; i++) {
+        (*list)[i].age = random(1, MAX_AGE);
+        gen_name((*list)[i].name);
+    }
+}
+
+void print_list(person_t* list, int entries) {
+    for (int i = 0; i < entries; i++) {
+        printf("%d | %s\n", list[i].age, list[i].name);
+    }
+}
