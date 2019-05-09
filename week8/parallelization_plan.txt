@@ -18,8 +18,9 @@ Data:
 8) local_data[workgroups] 
    -> l is local_index
 9) previous_prefix_sum_array[S / workgroups] (S / workgroups = 4)
-9) prefix_sum_previous = 0;
-10) sorted_array[N]
+10) int prefix_sum = 0;
+11) prefix_sum_previous = 0;
+12) sorted_array[N]
 
 Algorithm step 1 - histogramm:
 Kernel run with array_generated_data[M] -> (local_data[workgroups]) and histogramm_array[age_range];
@@ -29,16 +30,16 @@ Sum up the number of equal ages in the representing array-element (histogramm_ar
 
 
 Algorithm step 2 - prefix sum shifted by 1 (maybe sequential implementation better...):
-Kernel run 1 with histogramm_array[S] -> (local_data[workgroups]) and prefix_sum_previous_array[S / workgroups]; 
+Kernel run 1 with histogramm_array[S] -> (local_data[workgroups]) and previous_prefix_sum_array[S / workgroups]; 
 Calculates the sum of all histogramm_array[S] entries within one workgroup:
 E.g. workgroup 1 (of 4) adds the entries of histogramm_array from element 0 to 31):
 	-if ((int)s / workgroup == 0) {
 		prefix_sum += local_data[l];
 	 }
 	-barrier(CLK_LOCAL_MEM_FENCE); 
-	-prefix_sum_previous_array[(int)s / workgroup] = prefix_sum; (only 1 worker)
+	-previous_prefix_sum_array[(int)s / workgroup] = prefix_sum; (only 1 worker)
 
-Kernel run 2 with histogramm_array[S] -> (local_data[workgroups]), histogramm_array_prefix[age_range] and prefix_sum_previous_array[S / workgroups;
+Kernel run 2 with histogramm_array[S] -> (local_data[workgroups]), histogramm_array_prefix[age_range] and previous_prefix_sum_array[S / workgroups;
 Sum of all entries of histogramm_array[S] with an index < s:
 	-for(int i = 0; i < l-1; i++) {
 		histogramm_array_prefix[s] += local_data[i];
@@ -46,7 +47,7 @@ Sum of all entries of histogramm_array[S] with an index < s:
 	-following only with 1 worker! //adds the sum of all previous worksgroups
 		-int workgroup_nr = (int)s / workgroup == 0;
 		-for (int i == 0; i < workgroup_nr; i++){  //for all 4 possibilities
-			histogramm_array_prefix[s] += prefix_sum_previous_array[i];
+			histogramm_array_prefix[s] += previous_prefix_sum_array[i];
 		 }
 
 
