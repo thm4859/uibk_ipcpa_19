@@ -1,0 +1,57 @@
+PS 703106
+Exercise 7
+Group 4:
+• Jonas Boutelhik
+• Michael Thöni
+• Thomas Urban
+
+Data:
+1) workgroups = 32;
+2) age_range = 121 (0-120)
+3) array_generated_data[N]
+4) array_generated_data[M] (M is multiple of workgroups of N)
+   -> m is global_index of M
+5) histogramm_array[age_range] (filld with 0)
+6) histogramm_array[S] (S is multiple of workgroups of age_range) 
+   -> s is global index of S
+7) histogramm_array_prefix[age_range] (filld with 0)
+8) local_data[workgroups] 
+   -> l is local_index
+9) previous_prefix_sum_array[S / workgroups] (S / workgroups = 4)
+9) prefix_sum_previous = 0;
+10) sorted_array[N]
+
+Algorithm step 1 - histogramm:
+Kernel run with array_generated_data[M] -> (local_data[workgroups]) and histogramm_array[age_range];
+Sum up the number of equal ages in the representing array-element (histogramm_array[age_range]):
+	-histogramm_array[local_data[l]]++;
+	-return histogramm_array[age_range]
+
+
+Algorithm step 2 - prefix sum shifted by 1:
+Kernel run 1 with histogramm_array[S] -> (local_data[workgroups]) and prefix_sum_previous_array[S / workgroups]; 
+Calculates the sum of all histogramm_array[S] entries within one workgroup:
+E.g. workgroup 1 (of 4) adds the entries of histogramm_array from element 0 to 31):
+	-if ((int)s / workgroup == 0) {
+		prefix_sum += local_data[l];
+	 }
+	-barrier(CLK_LOCAL_MEM_FENCE); 
+	-prefix_sum_previous_array[(int)s / workgroup] = prefix_sum; (only 1 worker)
+
+Kernel run 2 with histogramm_array[S] -> (local_data[workgroups]), histogramm_array_prefix[age_range] and prefix_sum_previous_array[S / workgroups;
+Sum of all entries of histogramm_array[S] with an index < s:
+	-for(int i = 0; i < l-1; i++) {
+		histogramm_array_prefix[s] += local_data[i];
+	 }
+	-following only with 1 worker! //adds the sum of all previous worksgroups
+		-int workgroup_nr = (int)s / workgroup == 0;
+		-for (int i == 0; i < workgroup_nr; i++){  //for all 4 possibilities
+			histogramm_array_prefix[s] += prefix_sum_previous_array[i];
+		 }
+
+
+Algorithm step 3 - sorting:
+Kernel run 1 with array_generated_data[M] {{{-> (local_data[workgroups])}}},sorted_array[N] (empty output array) and histogramm_array_prefix[S]; 
+Copies each value of array_generated_data[M] in the sorted_array[N]:
+	-sorted_array[m] = array_generated_data[histogramm_array_prefix[array_generated_data[m]]++];
+
