@@ -119,5 +119,7 @@ person_t* count_sort(person_t* list, int n) {
         C[A[i].age] -= 1;
         B[C[A[i].age]] = A[i];
     }
+    // free the allocated memory
+    free(C);
     return B;
 }
