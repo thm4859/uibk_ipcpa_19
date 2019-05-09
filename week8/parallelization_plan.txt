@@ -19,8 +19,7 @@ Data:
    -> l is local_index
 9) previous_prefix_sum_array[S / workgroups] (S / workgroups = 4)
 10) int prefix_sum = 0;
-11) prefix_sum_previous = 0;
-12) sorted_array[N]
+11) sorted_array[N]
 
 Algorithm step 1 - histogramm:
 Kernel run with array_generated_data[M] -> (local_data[workgroups]) and histogramm_array[age_range];
