@@ -28,7 +28,7 @@ Sum up the number of equal ages in the representing array-element (histogramm_ar
 	-return histogramm_array[age_range]
 
 
-Algorithm step 2 - prefix sum shifted by 1:
+Algorithm step 2 - prefix sum shifted by 1 (maybe sequential implementation better...):
 Kernel run 1 with histogramm_array[S] -> (local_data[workgroups]) and prefix_sum_previous_array[S / workgroups]; 
 Calculates the sum of all histogramm_array[S] entries within one workgroup:
 E.g. workgroup 1 (of 4) adds the entries of histogramm_array from element 0 to 31):
