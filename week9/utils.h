@@ -30,3 +30,4 @@ int check (int* pre_data, int* post_data, int N) {
 	}
 	return check;
 }
+

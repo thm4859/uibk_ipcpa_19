@@ -5,7 +5,6 @@
 #include "cl_utils.h"
 
 
-
 long long roundUpToMultiple(long long N, long long B) {
     if ((N % B) == 0) return N;
     return N + (B - (N%B));
@@ -129,10 +128,6 @@ int main(int argc, char** argv) {
 		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
 	}
 
-	//tests if the output[] data are correct
-	char true[]="true";
-	char false[]="false";
-    printf("check: %s\n", check(data, output, N) == 1 ? true : false);
 
     // ---------- cleanup ----------
     
