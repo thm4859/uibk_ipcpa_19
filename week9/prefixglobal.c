@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
         // Part 1: ocl initialization
         cl_context context;
         cl_command_queue command_queue;
-        cl_device_id device_id = cluInitDevice(1, &context, &command_queue);
+        cl_device_id device_id = cluInitDevice(0, &context, &command_queue);
 
         // Part 2: create memory buffers
         cl_int err;
