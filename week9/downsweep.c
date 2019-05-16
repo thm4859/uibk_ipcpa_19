@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to write data to device");
 
         // Part 4: create kernel from source
-        cl_program program = cluBuildProgramFromFile(context, device_id, "hillissteele.cl", NULL);
+        cl_program program = cluBuildProgramFromFile(context, device_id, "downsweep.cl", NULL);
         cl_kernel kernel = clCreateKernel(program, "sum", &err);
         CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
 
@@ -120,10 +120,10 @@ int main(int argc, char** argv) {
 
 
     // -------- print result -------
-//    printf("\n\t\tinput\toutput\n");
-//    for (int i = 0; i < N; i++) {
-//		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
-//	}
+    printf("\n\t\tinput\toutput\n");
+    for (int i = 0; i < N; i++) {
+		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
+	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
@@ -137,4 +137,3 @@ int main(int argc, char** argv) {
     // done
     return EXIT_SUCCESS;
 }
-
