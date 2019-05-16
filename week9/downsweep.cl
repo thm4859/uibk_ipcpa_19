@@ -33,9 +33,9 @@ __kernel void sum(
 	for (int d = 1; d < n; d *= 2) { // traverse down tree & build scan
 		offset >>= 1;
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (thid < d) {
-			int ai = offset*(2*thid+1)-1;
-			int bi = offset*(2*thid+2)-1;
+		if (local_index < d) {
+			int ai = offset*(2*local_index+1)-1;
+			int bi = offset*(2*local_index+2)-1;
 			float t = temp[ai];
 			temp[ai] = temp[bi];
 			temp[bi] += t;
@@ -46,7 +46,6 @@ __kernel void sum(
       barrier(CLK_LOCAL_MEM_FENCE);
     
     
-    g_odata[2*global_index] = temp[2*local_index]; // write results to device memory
-    g_odata[2*global_index+1] = temp[2*local_index+1];
+    g_odata[2*global_index] = temp[2*local_index]+1; // write results to device memory
+    g_odata[2*global_index+1] = temp[2*local_index+1]+1;
 }
-
