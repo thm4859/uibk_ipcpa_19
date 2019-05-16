@@ -34,8 +34,8 @@ int main(int argc, char** argv) {
     
     // initializing random value buffer
     for(int i=0; i<N; i++) {
-        data[i] = rand() % 6;
-        //data[i] = 1;
+        //data[i] = rand() % 6;
+        data[i] = 1;
     }
 
     // ---------- compute ----------
@@ -47,6 +47,10 @@ int main(int argc, char** argv) {
         
         size_t work_group_size = N;
 
+	if(work_group_size>=1024){
+		work_group_size=512;
+	}
+	size_t x=(roundUpToMultiple(N,work_group_size))/work_group_size;
         // Part 1: ocl initialization
         cl_context context;
         cl_command_queue command_queue;
@@ -59,15 +63,22 @@ int main(int argc, char** argv) {
 
         cl_mem devDataB = clCreateBuffer(context, CL_MEM_READ_WRITE, (roundUpToMultiple(N,work_group_size)) *sizeof(int), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array");
-
-
+	cl_mem wSum = clCreateBuffer(context, CL_MEM_READ_WRITE, (roundUpToMultiple(N,work_group_size))/work_group_size *sizeof(int), NULL, &err);
+        CLU_ERRCHECK(err, "Failed to create buffer for input array");
+	cl_mem wRes = clCreateBuffer(context, CL_MEM_READ_WRITE, (roundUpToMultiple(N,work_group_size))/work_group_size *sizeof(int), NULL, &err);
+        CLU_ERRCHECK(err, "Failed to create buffer for input array");
         // Part 3: fill memory buffers (transferring A is enough, B can be anything)
         err = clEnqueueWriteBuffer(command_queue, devDataA, CL_TRUE, 0, N * sizeof(int), data, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
 
+	printf("test %i \n",(int)((roundUpToMultiple(N,work_group_size))/work_group_size));
         // Part 4: create kernel from source
-        cl_program program = cluBuildProgramFromFile(context, device_id, "hillissteele.cl", NULL);
-        cl_kernel kernel = clCreateKernel(program, "sum", &err);
+        cl_program program = cluBuildProgramFromFile(context, device_id, "prefixglobal.cl", NULL);
+        cl_kernel wskernel = clCreateKernel(program, "Workpresum", &err);
+        CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
+        cl_kernel sskernel = clCreateKernel(program, "Sumpresum", &err);
+        CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
+        cl_kernel skernel = clCreateKernel(program, "sumsum", &err);
         CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
 
         // Part 5: perform multi-step reduction
@@ -81,14 +92,26 @@ int main(int argc, char** argv) {
         printf("N: %lu, Global: %lu, WorkGroup: %lu\n", N, global_size, work_group_size);
     
         // update kernel parameters
-        clSetKernelArg(kernel, 0, sizeof(cl_mem), &devDataA);
-        clSetKernelArg(kernel, 1, sizeof(cl_mem), &devDataB);
-        clSetKernelArg(kernel, 2, 2 * global_size * sizeof(int), NULL);
-        clSetKernelArg(kernel, 3, sizeof(int), &N);
-	
+        clSetKernelArg(wskernel, 0, sizeof(cl_mem), &devDataA);
+        clSetKernelArg(wskernel, 1, sizeof(cl_mem), &devDataB);
+        clSetKernelArg(wskernel, 2, sizeof(cl_mem), &wSum);
+        clSetKernelArg(wskernel, 3, 2 * global_size * sizeof(int), NULL);
+        clSetKernelArg(wskernel, 4, sizeof(int), &N);
+
 	    // submit kernel
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");
-            
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, wskernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");
+	//now pre-result is in devDataB and workgoup-max is in wSum
+        clSetKernelArg(sskernel, 0, sizeof(cl_mem), &wSum);
+        clSetKernelArg(sskernel, 1, sizeof(cl_mem), &wRes);
+        clSetKernelArg(sskernel, 2, 2 * global_size * sizeof(int), NULL);
+        clSetKernelArg(sskernel, 3, sizeof(int), &N);
+	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, sskernel, 1, NULL, &x, &x, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
+        clSetKernelArg(skernel, 0, sizeof(cl_mem), &devDataB);
+        clSetKernelArg(skernel, 1, sizeof(cl_mem), &wSum);
+        clSetKernelArg(skernel, 2, sizeof(int), &N);
+	//CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, skernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
+
+
         //clFinish(command_queue);
         CLU_ERRCHECK(clFinish(command_queue), "Failed to wait for command queue completion");
         timestamp end_prefix_sum = now();
@@ -104,7 +127,9 @@ int main(int argc, char** argv) {
         // wait for completed operations (there should be none)
         CLU_ERRCHECK(clFlush(command_queue),    "Failed to flush command queue");
         CLU_ERRCHECK(clFinish(command_queue),   "Failed to wait for command queue completion");
-        CLU_ERRCHECK(clReleaseKernel(kernel),   "Failed to release kernel");
+        CLU_ERRCHECK(clReleaseKernel(wskernel),   "Failed to release kernel");
+        CLU_ERRCHECK(clReleaseKernel(sskernel),   "Failed to release kernel");
+        CLU_ERRCHECK(clReleaseKernel(skernel),   "Failed to release kernel");
         CLU_ERRCHECK(clReleaseProgram(program), "Failed to release program");
 
         // free device memory
@@ -120,10 +145,10 @@ int main(int argc, char** argv) {
 
 
     // -------- print result -------
-//    printf("\n\t\tinput\toutput\n");
-//    for (int i = 0; i < N; i++) {
-//		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
-//	}
+    printf("\n\t\tinput\toutput\n");
+    for (int i = 0; i < N; i++) {
+		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
+	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
@@ -137,4 +162,3 @@ int main(int argc, char** argv) {
     // done
     return EXIT_SUCCESS;
 }
-
