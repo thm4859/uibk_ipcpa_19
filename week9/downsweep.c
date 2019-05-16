@@ -130,7 +130,6 @@ int main(int argc, char** argv) {
 	char false[]="false";
     printf("check: %s\n", check(data, output, N) == 1 ? true : false);
 
-
     // ---------- cleanup ----------
     
     free(data);
