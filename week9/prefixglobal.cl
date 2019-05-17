@@ -27,12 +27,14 @@ __kernel void Workpresum(
     
 //Block A    
     int ai = local_index;
-	int bi = local_index + (n/2);
+	int bi = local_index + (n/get_num_groups(0))/2;
 	int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
 	int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
-	temp[ai + bankOffsetA] = g_idata[ai];
-	temp[bi + bankOffsetB] = g_idata[bi];
-    
+	temp[ai + bankOffsetA] = g_idata[ai+(get_group_id(0)*(n/get_num_groups(0)))];
+	temp[bi + bankOffsetB] = g_idata[bi+(get_group_id(0)*(n/get_num_groups(0)))];
+    if(ai>=(n/get_num_groups(0))/2){
+	return;
+	}
     
     
     // wait for all in group to flush results to local memory
@@ -75,8 +77,8 @@ __kernel void Workpresum(
 //E    g_odata[2*global_index] = temp[2*local_index]; // write results to device memory
 //E    g_odata[2*global_index+1] = temp[2*local_index+1];
 
-    g_odata[ai] = temp[ai + bankOffsetA]+1;
-	g_odata[bi] = temp[bi + bankOffsetB]+1;
+    g_odata[(get_group_id(0)*(n/get_num_groups(0)))+ai] = get_group_id(0);
+	g_odata[get_group_id(0)*(n/(get_num_groups(0)))+bi] =get_group_id(0);
 	if(global_index%(n/get_num_groups(0))==0){
 		w_sum[get_group_id(0)]=g_odata[global_index];
 	}
