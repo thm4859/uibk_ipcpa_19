@@ -13,7 +13,7 @@ __kernel void sum(
     
     // load data into local memory
     if (global_index < n) {
-        temp[pout*n +local_index] = (global_index >= 0) ? g_idata[global_index] : 0;
+        temp[pout*n +local_index] = (local_index > 0) ? g_idata[local_index-1] : 0;
     } 
     
     // wait for all in group to flush results to local memory
@@ -33,6 +33,6 @@ __kernel void sum(
       barrier(CLK_LOCAL_MEM_FENCE);
     }
     
-    g_odata[global_index] = temp[pout*n+local_index]; // write output
+    g_odata[local_index] = temp[pout*n+local_index]; // write output
 }
 

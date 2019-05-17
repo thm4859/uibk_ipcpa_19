@@ -34,8 +34,8 @@ int main(int argc, char** argv) {
     
     // initializing random value buffer
     for(int i=0; i<N; i++) {
-        //data[i] = rand() % 6;
-        data[i] = 1;
+        data[i] = rand() % 6;
+        //data[i] = 1;
     }
 
     // ---------- compute ----------

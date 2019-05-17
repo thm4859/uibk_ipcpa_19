@@ -14,11 +14,11 @@ long long roundUpToMultiple(long long N, long long B) {
 int main(int argc, char** argv) {
 
     // size of input-array
-    size_t N = 2048*2;
+    size_t N = 2048;
     if (argc > 1) {
         N = atol(argv[1]);
     }
-    printf("Computing Prefix sum implementation for a single work group according to Hillis and Steele of N=%ld values\n", N);
+    printf("Computing Prefix sum implementation for multiple work groups (prefixglobal) of N=%ld values\n", N);
 
     
     // ---------- setup ----------
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
         err = clEnqueueWriteBuffer(command_queue, devDataA, CL_TRUE, 0, N * sizeof(int), data, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to write data to device");
 
-	printf("test %i \n",(int)((roundUpToMultiple(N,work_group_size))/work_group_size));
+		printf("test %i \n",(int)((roundUpToMultiple(N,work_group_size))/work_group_size));
         // Part 4: create kernel from source
         cl_program program = cluBuildProgramFromFile(context, device_id, "prefixglobal.cl", NULL);
         cl_kernel wskernel = clCreateKernel(program, "Workpresum", &err);

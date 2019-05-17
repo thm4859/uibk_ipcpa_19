@@ -14,11 +14,11 @@ long long roundUpToMultiple(long long N, long long B) {
 int main(int argc, char** argv) {
 
     // size of input-array
-    size_t N = 2048*2;
+    size_t N = 2048;
     if (argc > 1) {
         N = atol(argv[1]);
     }
-    printf("Computing Prefix sum implementation for a single work group according up/down-sweep of N=%ld values\n", N);
+    printf("Computing Prefix sum implementation for a single work group according to Hillis and Steele of N=%ld values\n", N);
 
     
     // ---------- setup ----------
@@ -26,9 +26,8 @@ int main(int argc, char** argv) {
     // create a buffer for storing random values
     int* data = (int*)malloc(N*sizeof(int));
     int output[N];
-    //int* output = (int*)malloc(N*sizeof(int));
 
-    if (!data || !output) {
+    if (!data) {
         printf("Unable to allocate enough memory\n");
         return EXIT_FAILURE;
     }
@@ -67,7 +66,7 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to write data to device");
 
         // Part 4: create kernel from source
-        cl_program program = cluBuildProgramFromFile(context, device_id, "downsweep.cl", NULL);
+        cl_program program = cluBuildProgramFromFile(context, device_id, "prefixglobal_block.cl", NULL);
         cl_kernel kernel = clCreateKernel(program, "sum", &err);
         CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
 
@@ -121,10 +120,10 @@ int main(int argc, char** argv) {
 
 
     // -------- print result -------
-//    printf("\n\t\tinput\toutput\n");
-//    for (int i = 0; i < N; i++) {
-//		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
-//	}
+    printf("\n\t\tinput\toutput\n");
+    for (int i = 0; i < N; i++) {
+		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
+	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
@@ -134,8 +133,8 @@ int main(int argc, char** argv) {
     // ---------- cleanup ----------
     
     free(data);
-    //free(output);
     
     // done
     return EXIT_SUCCESS;
 }
+
