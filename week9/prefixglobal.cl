@@ -16,32 +16,21 @@ __kernel void Workpresum(
 )
 
 {
-    // get Ids
-    int global_index = get_global_id(0);
+        int global_index = get_global_id(0);
     int local_index = get_local_id(0);
     int offset = 1;
-    
+    int group_size=(n/get_num_groups(0));
+    int group_off=(get_group_id(0)*group_size);
+    //if(group_off==0){return;}
     // load data into local memory
-//A    temp[2*local_index] = g_idata[2*global_index]; // load input into shared memory
-//A    temp[2*local_index+1] = g_idata[2*global_index+1];
-    
-//Block A    
-    int ai = local_index;
-	int bi = local_index + (n/get_num_groups(0))/2;
-	int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
-	int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
-	temp[ai + bankOffsetA] = g_idata[ai+(get_group_id(0)*(n/get_num_groups(0)))];
-	temp[bi + bankOffsetB] = g_idata[bi+(get_group_id(0)*(n/get_num_groups(0)))];
-    if(ai>=(n/get_num_groups(0))/2){
-	return;
-	}
-    
+    temp[2*local_index] = g_idata[(2*global_index)]; // load input into shared memory
+    temp[2*local_index+1] = g_idata[(2*global_index+1)];
     
     // wait for all in group to flush results to local memory
     //barrier(CLK_LOCAL_MEM_FENCE);
     
     
-    for (int d = n>>1; d > 0; d >>= 1) { // build sum in place up the tree
+    for (int d = (n/get_num_groups(0))>>1; d > 0; d >>= 1) { // build sum in place up the tree
 		barrier(CLK_LOCAL_MEM_FENCE);
 		if (local_index < d) {
 			int ai = offset*(2*local_index+1)-1;
@@ -51,19 +40,16 @@ __kernel void Workpresum(
 		offset *= 2;
 	}
     
-//C    if (local_index == 0) { temp[n - 1] = 0; } // clear the last element
-    if (local_index==0) { 
-	
-	temp[n-1 + CONFLICT_FREE_OFFSET(n - 1)] = 0; 
-
-	}
-    
-	for (int d = 1; d < n; d *= 2) { // traverse down tree & build scan
+    if (local_index == 0) { 
+	w_sum[get_group_id(0)]=temp[(n/get_num_groups(0)) - 1];
+	temp[(n/get_num_groups(0)) - 1] = 0; 
+    } // clear the last element
+	for (int d = 1; d < (n/get_num_groups(0)); d *= 2) { // traverse down tree & build scan
 		offset >>= 1;
 		barrier(CLK_LOCAL_MEM_FENCE);
-		if (global_index < d) {
-			int ai = offset*(2*global_index+1)-1;
-			int bi = offset*(2*global_index+2)-1;
+		if (local_index < d) {
+			int ai = offset*(2*local_index+1)-1;
+			int bi = offset*(2*local_index+2)-1;
 			float t = temp[ai];
 			temp[ai] = temp[bi];
 			temp[bi] += t;
@@ -73,16 +59,12 @@ __kernel void Workpresum(
       // sync on local memory state
       barrier(CLK_LOCAL_MEM_FENCE);
     
-    
-//E    g_odata[2*global_index] = temp[2*local_index]; // write results to device memory
-//E    g_odata[2*global_index+1] = temp[2*local_index+1];
-
-    g_odata[(get_group_id(0)*(n/get_num_groups(0)))+ai] = get_group_id(0);
-	g_odata[get_group_id(0)*(n/(get_num_groups(0)))+bi] =get_group_id(0);
-	if(global_index%(n/get_num_groups(0))==0){
-		w_sum[get_group_id(0)]=g_odata[global_index];
+    if(2*global_index<(get_group_id(0)+1)*group_size && 2*global_index>(get_group_id(0))*group_size){
+    	g_odata[2*global_index] =temp[2*local_index]; // write results to device memory
 	}
-
+    if(2*global_index+1<(get_group_id(0)+1)*group_size && 2*global_index+1>(get_group_id(0))*group_size){
+    	g_odata[2*global_index+1] = temp[2*local_index+1];
+    }
 }
 
 __kernel void Sumpresum(
@@ -94,24 +76,14 @@ __kernel void Sumpresum(
 
 {
 
-    // get Ids
+       // get Ids
     int global_index = get_global_id(0);
     int local_index = get_local_id(0);
     int offset = 1;
     
     // load data into local memory
-//A    temp[2*local_index] = g_idata[2*global_index]; // load input into shared memory
-//A    temp[2*local_index+1] = g_idata[2*global_index+1];
-    
-//Block A    
-    int ai = local_index;
-	int bi = local_index + (n/2);
-	int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
-	int bankOffsetB = CONFLICT_FREE_OFFSET(ai);
-	temp[ai + bankOffsetA] = g_idata[ai];
-	temp[bi + bankOffsetB] = g_idata[bi];
-    
-    
+    temp[2*local_index] = g_idata[2*local_index]; // load input into shared memory
+    temp[2*local_index+1] = g_idata[2*local_index+1];
     
     // wait for all in group to flush results to local memory
     //barrier(CLK_LOCAL_MEM_FENCE);
@@ -127,12 +99,7 @@ __kernel void Sumpresum(
 		offset *= 2;
 	}
     
-//C    if (local_index == 0) { temp[n - 1] = 0; } // clear the last element
-    if (local_index==0) { 
-	temp[n-1 + CONFLICT_FREE_OFFSET(n - 1)] = 0; 
-
-	}
-    
+    if (local_index == 0) { temp[n - 1] = 0; } // clear the last element
 	for (int d = 1; d < n; d *= 2) { // traverse down tree & build scan
 		offset >>= 1;
 		barrier(CLK_LOCAL_MEM_FENCE);
@@ -149,10 +116,8 @@ __kernel void Sumpresum(
       barrier(CLK_LOCAL_MEM_FENCE);
     
     
-//E    g_odata[2*global_index] = temp[2*local_index]; // write results to device memory
-//E    g_odata[2*global_index+1] = temp[2*local_index+1];
-    g_odata[ai] = temp[ai + bankOffsetA]+1;
-	g_odata[bi] = temp[bi + bankOffsetB]+1;
+    g_odata[2*global_index] = temp[2*local_index]; // write results to device memory
+    g_odata[2*global_index+1] = temp[2*local_index+1];
 }
 
 __kernel void sumsum(
@@ -163,12 +128,9 @@ __kernel void sumsum(
 {
     int global_index = get_global_id(0);
     int w_ind = get_group_id(0);
-    
-	if(w_ind==0){
-		return;//nothing to do
-	}
+
 	if(n>global_index){
-		g_data[global_index]=g_data[global_index]+sum_data[w_ind-1];
+		g_data[global_index]=g_data[global_index]+sum_data[w_ind];
 	}else{return;}
 
 }
