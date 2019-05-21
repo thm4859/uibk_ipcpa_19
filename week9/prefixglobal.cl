@@ -134,3 +134,30 @@ __kernel void sumsum(
 	}else{return;}
 
 }
+#define MAX_AGE 120
+#define NAME_LEN 32
+
+typedef char name_t[NAME_LEN];
+
+typedef struct __attribute__ ((packed)){
+	int age;
+	name_t name;
+} person_t;
+
+
+__kernel void histogram_primitiv(
+	__global person_t* liste,
+	__global int* histy,
+	int n
+){
+	int global_index = get_global_id(0);
+	int b =0;
+	for(int i=0;i<n;i++){
+		if(liste[i].age==global_index){
+			b=b+1;
+		}
+	}
+	histy[global_index]=b;
+
+}
+
