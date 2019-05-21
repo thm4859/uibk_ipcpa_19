@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
         size_t work_group_size = N;
 
 	if(work_group_size>=1024){
-		work_group_size=512;
+		work_group_size=256*2;
 	}
 	size_t x=(roundUpToMultiple(N,work_group_size))/work_group_size;
         // Part 1: ocl initialization
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
         timestamp begin_prefix_sum = now();
         
         // perform one stage of the reduction
-        size_t global_size = roundUpToMultiple(N,work_group_size);
+        size_t global_size = roundUpToMultiple(N/2,work_group_size);
         
         // for debugging:
         printf("N: %lu, Global: %lu, WorkGroup: %lu\n", N, global_size, work_group_size);
@@ -105,11 +105,13 @@ int main(int argc, char** argv) {
         clSetKernelArg(sskernel, 1, sizeof(cl_mem), &wRes);
         clSetKernelArg(sskernel, 2, 2 * global_size * sizeof(int), NULL);
         clSetKernelArg(sskernel, 3, sizeof(int), &N);
+	work_group_size=work_group_size*2;
+        global_size = roundUpToMultiple(N,work_group_size);
 	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, sskernel, 1, NULL, &x, &x, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
         clSetKernelArg(skernel, 0, sizeof(cl_mem), &devDataB);
-        clSetKernelArg(skernel, 1, sizeof(cl_mem), &wSum);
+        clSetKernelArg(skernel, 1, sizeof(cl_mem), &wRes);
         clSetKernelArg(skernel, 2, sizeof(int), &N);
-	//CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, skernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
+	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, skernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
 
 
         //clFinish(command_queue);
@@ -118,7 +120,7 @@ int main(int argc, char** argv) {
         printf("\tprefix_sum took: %.3f ms\n", (end_prefix_sum - begin_prefix_sum)*1000);
 
         // download result from device
-        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N * sizeof(int), &output, 0, NULL, NULL);
+        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N* sizeof(int), &output, 0, NULL, NULL);
         CLU_ERRCHECK(err, "Failed to download result from device");
         
 
@@ -145,10 +147,10 @@ int main(int argc, char** argv) {
 
 
     // -------- print result -------
-    printf("\n\t\tinput\toutput\n");
-    for (int i = 0; i < N; i++) {
-		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
-	}
+    //printf("\n\t\tinput\toutput\n");
+    //for (int i = 0; i < N; i++) {
+//		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
+//	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
