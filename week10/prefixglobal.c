@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     person_t* liste;
     // generate a list of N persons
     generate_list(&liste, 42, N);
+    print_list( liste, N);
     int output[N];
 
     if (!data) {
@@ -43,15 +44,15 @@ int main(int argc, char** argv) {
 
     // ---------- compute ----------
     printf("Counting ...\n");
-        
+    int out[128];    
     timestamp begin = now();
     {
         // - setup -
-        
+    
         size_t work_group_size = N;
-	size_t histo_global = MAX_AGE+1;
+	size_t histo_global = 128;//MAX_AGE+1;
 	if(work_group_size>=1024){
-		work_group_size=256*2;
+		work_group_size=128;
 	}
 	size_t x=(roundUpToMultiple(N,work_group_size))/work_group_size;
         // Part 1: ocl initialization
@@ -65,9 +66,10 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to create buffer for input array");
 
         cl_mem list_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, N *sizeof(person_t), NULL, &err);
-        cl_mem histogram = clCreateBuffer(context, CL_MEM_READ_WRITE, N *sizeof(int), NULL, &err);
+        cl_mem list_res = clCreateBuffer(context, CL_MEM_READ_WRITE, N *sizeof(person_t), NULL, &err);
+        cl_mem histogram = clCreateBuffer(context, CL_MEM_READ_WRITE, histo_global *sizeof(int), NULL, &err);
 
-        cl_mem devDataB = clCreateBuffer(context, CL_MEM_READ_WRITE, (roundUpToMultiple(N,work_group_size)) *sizeof(int), NULL, &err);
+        cl_mem devDataB = clCreateBuffer(context, CL_MEM_READ_WRITE, histo_global*sizeof(int), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array");
 	cl_mem wSum = clCreateBuffer(context, CL_MEM_READ_WRITE, (roundUpToMultiple(N,work_group_size))/work_group_size *sizeof(int), NULL, &err);
         CLU_ERRCHECK(err, "Failed to create buffer for input array");
@@ -88,6 +90,8 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
         cl_kernel skernel = clCreateKernel(program, "sumsum", &err);
         CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
+		cl_kernel ckernel = clCreateKernel(program, "copy", &err);
+        CLU_ERRCHECK(err, "Failed to create reduction kernel from program");
 
         // Part 5: perform multi-step reduction
         CLU_ERRCHECK(clFinish(command_queue), "Failed to wait for command queue completion");
@@ -98,16 +102,25 @@ int main(int argc, char** argv) {
         
         // for debugging:
         printf("N: %lu, Global: %lu, WorkGroup: %lu\n", N, global_size, work_group_size);
-    
+        
+        //histogram kernel set
+		clSetKernelArg(hskernel, 0, sizeof(cl_mem), &list_buffer);
+        clSetKernelArg(hskernel, 1, sizeof(cl_mem), &histogram);
+        clSetKernelArg(hskernel, 2, sizeof(int), &N);
+		CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, hskernel, 1, NULL, &histo_global, &histo_global, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
+		//-----
+		
+		//all 3 presum kernels set
         // update kernel parameters
-        clSetKernelArg(wskernel, 0, sizeof(cl_mem), &devDataA);
+        clSetKernelArg(wskernel, 0, sizeof(cl_mem), &histogram);
         clSetKernelArg(wskernel, 1, sizeof(cl_mem), &devDataB);
         clSetKernelArg(wskernel, 2, sizeof(cl_mem), &wSum);
         clSetKernelArg(wskernel, 3, 2 * global_size * sizeof(int), NULL);
         clSetKernelArg(wskernel, 4, sizeof(int), &N);
-
+		
 	    // submit kernel
         CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, wskernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");
+        err = clEnqueueReadBuffer(command_queue, histogram, CL_TRUE, 0, 128 *sizeof(int), &out, 0, NULL, NULL);
 	//now pre-result is in devDataB and workgoup-max is in wSum
         clSetKernelArg(sskernel, 0, sizeof(cl_mem), &wSum);
         clSetKernelArg(sskernel, 1, sizeof(cl_mem), &wRes);
@@ -121,19 +134,24 @@ int main(int argc, char** argv) {
         clSetKernelArg(skernel, 2, sizeof(int), &N);
 	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, skernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
 
-	clSetKernelArg(hskernel, 0, sizeof(cl_mem), &list_buffer);
-        clSetKernelArg(hskernel, 1, sizeof(cl_mem), &histogram);
-        clSetKernelArg(hskernel, 2, sizeof(int), &N);
-	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, hskernel, 1, NULL, &histo_global, &histo_global, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
-
+		//now prefix sum of histogram in devDataB
+		clSetKernelArg(ckernel, 0, sizeof(cl_mem), &list_buffer);
+		clSetKernelArg(ckernel, 1, sizeof(cl_mem), &list_res);
+        clSetKernelArg(ckernel, 2, sizeof(cl_mem), &devDataB);
+        clSetKernelArg(ckernel, 3, sizeof(int), &N);
+		CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, ckernel, 1, NULL, &histo_global, &histo_global, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
+		//copy kernel set:
+		
+		
         //clFinish(command_queue);
         CLU_ERRCHECK(clFinish(command_queue), "Failed to wait for command queue completion");
         timestamp end_prefix_sum = now();
         printf("\tprefix_sum took: %.3f ms\n", (end_prefix_sum - begin_prefix_sum)*1000);
 
         // download result from device
-        err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, N* sizeof(int), &output, 0, NULL, NULL);
-
+        
+       
+		
         CLU_ERRCHECK(err, "Failed to download result from device");
         
 
@@ -145,6 +163,7 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(clReleaseKernel(wskernel),   "Failed to release kernel");
         CLU_ERRCHECK(clReleaseKernel(sskernel),   "Failed to release kernel");
         CLU_ERRCHECK(clReleaseKernel(skernel),   "Failed to release kernel");
+        CLU_ERRCHECK(clReleaseKernel(ckernel),   "Failed to release kernel");
 	CLU_ERRCHECK(clReleaseKernel(hskernel),"failed kernel histogram");
         CLU_ERRCHECK(clReleaseProgram(program), "Failed to release program");
 
@@ -152,6 +171,7 @@ int main(int argc, char** argv) {
         CLU_ERRCHECK(clReleaseMemObject(devDataA), "Failed to release data buffer A");
         CLU_ERRCHECK(clReleaseMemObject(devDataB), "Failed to release data buffer B");
 	CLU_ERRCHECK(clReleaseMemObject(list_buffer), "Failed to release data buffer ");
+	CLU_ERRCHECK(clReleaseMemObject(list_res), "Failed to release data buffer ");
 	CLU_ERRCHECK(clReleaseMemObject(histogram), "Failed to release data buffer ");
 	CLU_ERRCHECK(clReleaseMemObject(wSum), "Failed to release data buffer ");
 	CLU_ERRCHECK(clReleaseMemObject(wRes), "Failed to release data buffer ");
@@ -165,17 +185,18 @@ int main(int argc, char** argv) {
 
     // -------- print result -------
     //printf("\n\t\tinput\toutput\n");
-    //for (int i = 0; i < MAX_AGE; i++) {
-//		printf("Number %d:\t%d\t%d\n", i + 1, data[i], output[i]);
-//	}
+    for (int i = 0; i < MAX_AGE; i++) {
+		printf("Number %d:\t %d\n", i + 1, out[i]);
+	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
 	char false[]="false";
-    printf("check: %s\n", check(data, output, N) == 1 ? true : false);
+    
 
     // ---------- cleanup ----------
     free(liste);
+    printf("check: %s\n", check(data, output, N) == 1 ? true : false);
     free(data);
     
     // done
