@@ -168,7 +168,8 @@ __kernel void histogram_primitiv(
 __kernel void copy(
 	__global person_t* start,
 	__global person_t* end,
-	__global int* histy
+	__global int* histy,
+    int n
 //128 worker die alle die schleife durchgehen und einfügen
 // use of local memory is possible:
 //have a local_memsize sized batch of start data and then load them into memory
@@ -179,7 +180,7 @@ __kernel void copy(
 	int own_offset=0;
 	for(int i=0;i<n;i++){
 		if(start[i].age==global_index){
-			end[histy[global_index]+own_offset]=start[i]
+			end[histy[global_index]+own_offset]=start[i];
 			own_offset=own_offset+1;
 		}
 	}
