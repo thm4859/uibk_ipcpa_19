@@ -150,6 +150,10 @@ __kernel void histogram_primitiv(
 	__global int* histy,
 	int n
 ){
+//parallelisation strat for this kernel:
+//have n batches, for n workgroups calculating n histogramms (< 128 histograms no doubt)
+//and have then a reduction step on these -> 1 step at most
+//all in all probably same or greater number of global memory access so not worth the logic overhead
 	int global_index = get_global_id(0);
 	int b =0;
 	for(int i=0;i<n;i++){
@@ -161,3 +165,23 @@ __kernel void histogram_primitiv(
 
 }
 
+__kernel void copy(
+	__global person_t* start,
+	__global person_t* end,
+	__global int* histy
+//128 worker die alle die schleife durchgehen und einfügen
+// use of local memory is possible:
+//have a local_memsize sized batch of start data and then load them into memory
+//(in parallell by the 128(or N superfluous) workers) and loop through the batches of start
+//overhead in opencl host logic so ommitted for now
+){
+	int global_index = get_global_id(0);
+	int own_offset=0;
+	for(int i=0;i<n;i++){
+		if(start[i].age==global_index){
+			end[histy[global_index]+own_offset]=start[i]
+			own_offset=own_offset+1;
+		}
+	}
+
+}
