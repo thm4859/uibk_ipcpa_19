@@ -15,8 +15,10 @@ int main(int argc, char** argv) {
 
     // size of input-array
     size_t N = 2048;
+    size_t N2 = 2048;
     if (argc > 1) {
         N = atol(argv[1]);
+	N2 = atol(argv[1]);
     }
     printf("Computing Prefix sum implementation for multiple work groups (prefixglobal) of N=%ld values\n", N);
 
@@ -30,7 +32,7 @@ int main(int argc, char** argv) {
     generate_list(&liste, 42, N);
     print_list( liste, N);
     int output[N];
-
+    person_t res[N];
     if (!data) {
         printf("Unable to allocate enough memory\n");
         return EXIT_FAILURE;
@@ -44,7 +46,8 @@ int main(int argc, char** argv) {
 
     // ---------- compute ----------
     printf("Counting ...\n");
-    int out[128];    
+    int out[128];  
+ 
     timestamp begin = now();
     {
         // - setup -
@@ -96,7 +99,7 @@ int main(int argc, char** argv) {
         // Part 5: perform multi-step reduction
         CLU_ERRCHECK(clFinish(command_queue), "Failed to wait for command queue completion");
         timestamp begin_prefix_sum = now();
-        
+	N=128; 
         // perform one stage of the reduction
         size_t global_size = roundUpToMultiple(N/2,work_group_size);
         
@@ -106,21 +109,20 @@ int main(int argc, char** argv) {
         //histogram kernel set
 		clSetKernelArg(hskernel, 0, sizeof(cl_mem), &list_buffer);
         clSetKernelArg(hskernel, 1, sizeof(cl_mem), &histogram);
-        clSetKernelArg(hskernel, 2, sizeof(int), &N);
+        clSetKernelArg(hskernel, 2, sizeof(int), &N2);
 		CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, hskernel, 1, NULL, &histo_global, &histo_global, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
 		//-----
 		
 		//all 3 presum kernels set
         // update kernel parameters
-        clSetKernelArg(wskernel, 0, sizeof(cl_mem), &histogram);
-        clSetKernelArg(wskernel, 1, sizeof(cl_mem), &devDataB);
-        clSetKernelArg(wskernel, 2, sizeof(cl_mem), &wSum);
-        clSetKernelArg(wskernel, 3, 2 * global_size * sizeof(int), NULL);
-        clSetKernelArg(wskernel, 4, sizeof(int), &N);
+        clSetKernelArg(sskernel, 0, sizeof(cl_mem), &histogram);
+        clSetKernelArg(sskernel, 1, sizeof(cl_mem), &devDataB);
+        clSetKernelArg(sskernel, 2, 2 * global_size * sizeof(int), NULL);
+        clSetKernelArg(sskernel, 3, sizeof(int), &N);
 		
 	    // submit kernel
-        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, wskernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");
-        err = clEnqueueReadBuffer(command_queue, histogram, CL_TRUE, 0, 128 *sizeof(int), &out, 0, NULL, NULL);
+        CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, sskernel, 1, NULL, &global_size, &global_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");
+//err = clEnqueueReadBuffer(command_queue, devDataB, CL_TRUE, 0, 128 *sizeof(int), &out, 0, NULL, NULL);
 	//now pre-result is in devDataB and workgoup-max is in wSum
         clSetKernelArg(sskernel, 0, sizeof(cl_mem), &wSum);
         clSetKernelArg(sskernel, 1, sizeof(cl_mem), &wRes);
@@ -133,15 +135,15 @@ int main(int argc, char** argv) {
         clSetKernelArg(skernel, 1, sizeof(cl_mem), &wRes);
         clSetKernelArg(skernel, 2, sizeof(int), &N);
 	CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, skernel, 1, NULL, &global_size, &work_group_size, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
-
+        
 		//now prefix sum of histogram in devDataB
 		clSetKernelArg(ckernel, 0, sizeof(cl_mem), &list_buffer);
 		clSetKernelArg(ckernel, 1, sizeof(cl_mem), &list_res);
         clSetKernelArg(ckernel, 2, sizeof(cl_mem), &devDataB);
-        clSetKernelArg(ckernel, 3, sizeof(int), &N);
+        clSetKernelArg(ckernel, 3, sizeof(int), &N2);
 		CLU_ERRCHECK(clEnqueueNDRangeKernel(command_queue, ckernel, 1, NULL, &histo_global, &histo_global, 0, NULL, NULL), "Failed to enqueue reduction kernel");    
 		//copy kernel set:
-		
+	err = clEnqueueReadBuffer(command_queue, list_res, CL_TRUE, 0, N2 *sizeof(person_t), &res, 0, NULL, NULL);
 		
         //clFinish(command_queue);
         CLU_ERRCHECK(clFinish(command_queue), "Failed to wait for command queue completion");
@@ -149,7 +151,7 @@ int main(int argc, char** argv) {
         printf("\tprefix_sum took: %.3f ms\n", (end_prefix_sum - begin_prefix_sum)*1000);
 
         // download result from device
-        
+        print_list(res, N2);
        
 		
         CLU_ERRCHECK(err, "Failed to download result from device");
@@ -185,9 +187,9 @@ int main(int argc, char** argv) {
 
     // -------- print result -------
     //printf("\n\t\tinput\toutput\n");
-    for (int i = 0; i < MAX_AGE; i++) {
-		printf("Number %d:\t %d\n", i + 1, out[i]);
-	}
+    //for (int i = 0; i < MAX_AGE; i++) {
+//		printf("Number %d:\t %d\n", i + 1, out[i]);
+//	}
 
 	//tests if the output[] data are correct
 	char true[]="true";
