@@ -156,6 +156,7 @@ __kernel void histogram_primitiv(
 //all in all probably same or greater number of global memory access so not worth the logic overhead
 	int global_index = get_global_id(0);
 	int b =0;
+	
 	for(int i=0;i<n;i++){
 		if(liste[i].age==global_index){
 			b=b+1;
@@ -177,6 +178,7 @@ __kernel void copy(
 //overhead in opencl host logic so ommitted for now
 ){
 	int global_index = get_global_id(0);
+
 	int own_offset=0;
 	for(int i=0;i<n;i++){
 		if(start[i].age==global_index){
