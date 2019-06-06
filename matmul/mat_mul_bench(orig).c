@@ -42,7 +42,6 @@ int roundUpToMultiple(int N, int B) {
 int SIZES[] = { 500, 734, 1024, 1493, 2345, 4001 };//original: 500, 734, 1024, 1493, 2345, 4001 
 int NUM_SIZES = 6;
 int NUM_REPETITION = 3;
-int WORKGROUP_SIZE = 32; //if WORKGROUP_SIZE will be changed, adapt also #define BLOCK_SIZE 32 in mat_mul.cl line 52 (before kernel: matrixMul4)
 
 // ----------------------
 
@@ -105,7 +104,7 @@ int main(int argc, char** argv) {
         double cpu_end = now();
         double cpu_duration = cpu_end - cpu_start;
         printf("\tCPU setup took %2.3fs / %5.3f GFLOPS\n", cpu_duration, (2.0*N*N*N) / cpu_duration / 1e9);
-        int xl=roundUpToMultiple(N,WORKGROUP_SIZE);
+        int xl=roundUpToMultiple(N,32);
         // repeat X times ..
         for(int r=0; r<NUM_REPETITION; r++) {
 
@@ -121,7 +120,7 @@ int main(int argc, char** argv) {
             cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, N * N * sizeof(value_t), NULL, &err);
 
 
-			cl_mem devMatAXL = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, xl * xl * sizeof(value_t), NULL, &err);
+	    cl_mem devMatAXL = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, xl * xl * sizeof(value_t), NULL, &err);
             CLU_ERRCHECK(err, "Failed to create buffer for matrix A");
             cl_mem devMatBXL = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, xl * xl * sizeof(value_t), NULL, &err);
             CLU_ERRCHECK(err, "Failed to create buffer for matrix B");
@@ -144,76 +143,65 @@ int main(int argc, char** argv) {
             // -- run computation --
 
             // set arguments and execute kernel
-            size_t S = roundUpToMultiple(N,WORKGROUP_SIZE);
+            size_t S = roundUpToMultiple(N,32);
             size_t size[2] = {S, S};
-			cluSetKernelArguments(env.add_zeros, 5,
+	    cluSetKernelArguments(env.add_zeros, 4,
                 sizeof(int), &N,
                 sizeof(cl_mem), (void *)&devMatA,
                 sizeof(int), &xl,
-                sizeof(cl_mem), (void *)&devMatAXL,
-                sizeof(int), &WORKGROUP_SIZE
+                sizeof(cl_mem), (void *)&devMatAXL
             );
  
 
             // submit kernel
-            cl_event event[4];
-			const int TS = WORKGROUP_SIZE;
-			const size_t local[2] = { TS, TS };
-			const size_t globalXL[2] = { xl, xl };
-			const size_t global[2] = { N, N };
-			CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.add_zeros, 2, NULL, globalXL, local, 0, NULL, &event[0]), "Failed to enqueue 2D kernel");
-            
-            
-			cluSetKernelArguments(env.add_zeros, 5,
+            cl_event event;
+	    const int TS = 32;
+	    const size_t local[2] = { TS, TS };
+	    const size_t globalXL[2] = { xl, xl };
+	    const size_t global[2] = { N, N };
+            CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.add_zeros, 2, NULL, globalXL, local, 0, NULL, &event), "Failed to enqueue 2D kernel");
+	    cluSetKernelArguments(env.add_zeros, 4,
                 sizeof(int), &N,
                 sizeof(cl_mem), (void *)&devMatB,
                 sizeof(int), &xl,
-                sizeof(cl_mem), (void *)&devMatBXL,
-                sizeof(int), &WORKGROUP_SIZE
-			);
-			CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.add_zeros, 2, NULL, globalXL, local, 0, NULL, &event[1]), "Failed to enqueue 2D kernel");
-	    
-			cluSetKernelArguments(env.kernel, 5,
+                sizeof(cl_mem), (void *)&devMatBXL
+            );
+	    CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.add_zeros, 2, NULL, globalXL, local, 0, NULL, &event), "Failed to enqueue 2D kernel");
+           cluSetKernelArguments(env.kernel, 4,
                 sizeof(cl_mem), (void *)&devMatCXL,
                 sizeof(cl_mem), (void *)&devMatAXL,
                 sizeof(cl_mem), (void *)&devMatBXL,
-                sizeof(int), &xl,
-                sizeof(int), &WORKGROUP_SIZE
-			);
-			CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.kernel, 2, NULL, globalXL, local, 0, NULL, &event[2]), "Failed to enqueue 2D kernel");
+                sizeof(int), &xl
+            );
+            CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.kernel, 2, NULL, globalXL, local, 0, NULL, &event), "Failed to enqueue 2D kernel");
 
-			cluSetKernelArguments(env.lose_zeros, 5,
+	cluSetKernelArguments(env.lose_zeros, 4,
                 sizeof(int), &xl,
                 sizeof(cl_mem), (void *)&devMatCXL,
                 sizeof(int), &N,
-                sizeof(cl_mem), (void *)&devMatC,
-                sizeof(int), &WORKGROUP_SIZE
-			);
-			CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.lose_zeros, 2, NULL, globalXL, local, 0, NULL, &event[3]), "Failed to enqueue 2D kernel");
+                sizeof(cl_mem), (void *)&devMatC
+            );
+	    CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.lose_zeros, 2, NULL, globalXL, local, 0, NULL, &event), "Failed to enqueue 2D kernel");
 
             // wait for kernel
-            clWaitForEvents(1,&event[3]);
+            clWaitForEvents(1,&event);
             
             // test whether kernel finished successfully
             cl_int status;
-            clGetEventInfo(event[3], CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, NULL);
+            clGetEventInfo(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, NULL);
             if (status < 0) {
                 CLU_ERRCHECK(-status, "Kernel failed to execute succesfully.");
                 exit(1);
             }
             
             // get execution time
-            cl_ulong start, end, duration = 0;
-            cl_event event1;
-            for (int i = 0; i < sizeof(event)/sizeof(cl_event); i++) {
-				clGetEventProfilingInfo(event[i], CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
-				clGetEventProfilingInfo(event[i], CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
-				duration += end - start;
-			}
-
+            cl_ulong start, end, duration;
+            clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+            clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+            duration = end - start;
    
             // release event
-            CLU_ERRCHECK(clReleaseEvent(event[3]), "Failed to release event");
+            CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
 
             // copy results back to host
             err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
@@ -234,7 +222,7 @@ int main(int argc, char** argv) {
             
             double seconds = duration / 1e9;
             double curMflops = (2.0*N*N*N) / seconds / 1e9;
-            printf("\tDuration: %2.6fs, GFLOPS: %5.3f, Verification: %s\n", seconds, curMflops, (success)?"OK":"FAILED");
+            printf("\tDuration: %2.3fs, GFLOPS: %5.3f, Verification: %s\n", seconds, curMflops, (success)?"OK":"FAILED");
             
             // keep track of overall success
             if (!success) allValid = false;
@@ -246,13 +234,13 @@ int main(int argc, char** argv) {
             CLU_ERRCHECK(clReleaseMemObject(devMatA), "Failed to release Matrix A");
             CLU_ERRCHECK(clReleaseMemObject(devMatB), "Failed to release Matrix B");
             CLU_ERRCHECK(clReleaseMemObject(devMatC), "Failed to release Matrix C");
-			CLU_ERRCHECK(clReleaseMemObject(devMatAXL), "Failed to release Matrix A");
+	    CLU_ERRCHECK(clReleaseMemObject(devMatAXL), "Failed to release Matrix A");
             CLU_ERRCHECK(clReleaseMemObject(devMatBXL), "Failed to release Matrix B");
             CLU_ERRCHECK(clReleaseMemObject(devMatCXL), "Failed to release Matrix C");
 
         }
         
-        printf("\t\t\t\tPerformance result for N=%d: %5.3f GFLOPS\n", N, mflops[i]);
+        printf("\t\t\t\tPerformance result for N=%d: %5.3f\n", N, mflops[i]);
 
         // --- cleanup ---
 
