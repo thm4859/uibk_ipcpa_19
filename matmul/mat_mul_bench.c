@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
         }
         double cpu_end = now();
         double cpu_duration = cpu_end - cpu_start;
-        printf("\tCPU setup took %2.3fs / %5.3f GFLOPS\n", cpu_duration, (2.0*N*N*N) / cpu_duration / 1e9);
+        printf("\tCPU setup took %2.6fs / %5.3f GFLOPS\n", cpu_duration, (2.0*N*N*N) / cpu_duration / 1e9);
         int xl=roundUpToMultiple(N,WORKGROUP_SIZE);
         // repeat X times ..
         for(int r=0; r<NUM_REPETITION; r++) {
