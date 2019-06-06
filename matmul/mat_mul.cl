@@ -1,40 +1,17 @@
-//naive first kernel:
-__kernel void mat_mul(
-    __global float* c, 
-    __global const float* a, 
-    __global const float* b,
-    int N
-) {
-    // obtain position of this 'thread'
-    size_t i = get_global_id(1);
-    size_t j = get_global_id(0);
-
-    // if beyond boundaries => skip this one
-    if (i >= N || j >= N) return;
-
-    // compute C := A * B
-    float sum = 0;
-    for(int k = 0; k<N; k++) {
-        sum += a[i*N+k] * b[k*N+j];
-    }
-    c[i*N+j] = sum;
-}
-
-
 
 //first added local memory use:
 // however it already needs padding:
 // chose to do this the weird way: have it actually copy from too small to padded
 // and then have a Kernel that removes the zeros form the result:
-#define PADDINGX 32
 __kernel void paddingAddZeroes(const int P, 
                                const __global float* input,
                                const int P_XL,
-                               __global float* output) {
+                               __global float* output,
+                               const int PADDING) {
     
     // Thread identifiers
-    const int tx = get_group_id(0)*PADDINGX + get_local_id(0);
-    const int ty = get_group_id(1)*PADDINGX + get_local_id(1);
+    const int tx = get_group_id(0)*PADDING + get_local_id(0);
+    const int ty = get_group_id(1)*PADDING + get_local_id(1);
  
     // Check whether we are within bounds of the XL matrix
     if (tx < P_XL && ty < P_XL) {
@@ -56,11 +33,12 @@ __kernel void paddingAddZeroes(const int P,
 __kernel void paddingRemoveZeroes(const int P_XL, 
                                   const __global float* input,
                                   const int P, 
-                                  __global float* output) {
+                                  __global float* output,
+                                  const int PADDING) {
     
     // Thread identifiers
-    const int tx = get_group_id(0)*PADDINGX + get_local_id(0); 
-    const int ty = get_group_id(1)*PADDINGX + get_local_id(1); 
+    const int tx = get_group_id(0)*PADDING + get_local_id(0); 
+    const int ty = get_group_id(1)*PADDING + get_local_id(1); 
 
 
     // Only store the result if within P * P bounds
@@ -70,62 +48,14 @@ __kernel void paddingRemoveZeroes(const int P_XL,
 }
 
 
-#define TS 32
-
-__kernel void mat_mul_loc1(
-			__global float* C,
-                      const __global float* A,
-                      const __global float* B,
-			const int N
-                      ) {
-    
-    // Thread identifiers
-    const int M=N;
-    const int K=N;
-    const int row = get_local_id(0); // Local row ID (max: TS)
-    const int col = get_local_id(1); // Local col ID (max: TS)
-    const int globalRow = TS*get_group_id(0) + row; // Row ID of C (0..M)
-    const int globalCol = TS*get_group_id(1) + col; // Col ID of C (0..N)
-    if (col >= N || row >= N) return;
-    // Local memory to fit a tile of TS*TS elements of A and B
-    __local float Asub[TS][TS];
-    __local float Bsub[TS][TS];
- 
-    // Initialise the accumulation register
-    float acc = 0.0f;
-    
-    // Loop over all tiles
-    const int numTiles = K/TS;
-    for (int t=0; t<numTiles; t++) {
- 
-        // Load one tile of A and B into local memory
-        const int tiledRow = TS*t + row;
-        const int tiledCol = TS*t + col;
-        Asub[col][row] = A[tiledCol*M + globalRow];
-        Bsub[col][row] = B[globalCol*K + tiledRow];
- 
-        // Synchronise to make sure the tile is loaded
-        barrier(CLK_LOCAL_MEM_FENCE);
- 
-        // Perform the computation for a single tile
-        for (int k=0; k<TS; k++) {
-            acc += Asub[k][row] * Bsub[col][k];
-        }
- 
-        // Synchronise before loading the next tile
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
- 
-    // Store the final result in C
-    C[globalCol*M + globalRow] = acc;
-}
 #define BLOCK_SIZE 32
 __kernel void matrixMul4(
 	__global float* C,
 	__global float* A,
 	__global float* B,
-	const int N){
-
+	const int N,
+	__const int BLOCK_SIZE_)
+{
 	float Csub = 0;
 	// Block index
 	int bx = get_group_id(0);
@@ -148,10 +78,12 @@ __kernel void matrixMul4(
 	for (int a = aBegin, b = bBegin;
 		a <= aEnd;
 		a += aStep, b += bStep){
+		
 		// Local memory array As used to store the sub-matrix of A
-		__local float As[BLOCK_SIZE][BLOCK_SIZE];
+		local float As[BLOCK_SIZE][BLOCK_SIZE];
 		// Local memory array Bs used to store the sub-matrix of B
-		__local float Bs[BLOCK_SIZE][BLOCK_SIZE];
+		local float Bs[BLOCK_SIZE][BLOCK_SIZE];		
+		
 		// Load the matrices from global memory to local memory
 		// each thread loads one element of each matrix
 		As[ty][tx] = A[a + N * ty + tx];
