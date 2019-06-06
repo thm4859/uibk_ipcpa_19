@@ -48,7 +48,7 @@ __kernel void paddingRemoveZeroes(const int P_XL,
 }
 
 
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 16
 __kernel void matrixMul4(
 	__global float* C,
 	__global float* A,

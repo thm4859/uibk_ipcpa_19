@@ -42,7 +42,7 @@ int roundUpToMultiple(int N, int B) {
 int SIZES[] = { 500, 734, 1024, 1493, 2345, 4001 };//original: 500, 734, 1024, 1493, 2345, 4001 
 int NUM_SIZES = 6;
 int NUM_REPETITION = 3;
-int WORKGROUP_SIZE = 32; //if WORKGROUP_SIZE will be changed, adapt also #define BLOCK_SIZE 32 in mat_mul.cl line 52 (before kernel: matrixMul4)
+int WORKGROUP_SIZE = 16; //if WORKGROUP_SIZE will be changed, adapt also #define BLOCK_SIZE 32 in mat_mul.cl line 52 (before kernel: matrixMul4)
 
 // ----------------------
 
@@ -309,7 +309,7 @@ cl_mm_environment createMMEnvironment() {
     cl_mm_environment res;
     
     // ocl initialization
-    cl_device_id device_id = cluInitDeviceWithProperties(0, &res.context, &res.queue, CL_QUEUE_PROFILING_ENABLE);
+    cl_device_id device_id = cluInitDeviceWithProperties(1, &res.context, &res.queue, CL_QUEUE_PROFILING_ENABLE);
 
     // create kernel from source
     cl_int err;
