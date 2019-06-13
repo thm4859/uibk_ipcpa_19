@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
+#include <omp.h>
 #include "utils.h"
 
 int main(int argc, char** argv) {
@@ -34,27 +34,35 @@ int main(int argc, char** argv) {
   double start = now();
 
   // initialize solutions for costs of single matrix
-  for(int i=0; i<N; i++) {
-    C[i*N+i] = 0;   // there is no multiplication cost for those sub-terms
+  #pragma omp parallel num_threads(N)
+  {
+	int id = omp_get_thread_num();
+	C[id*N+id]=0;
   }
 
   // compute minimal costs for multiplying A_i x ... x A_j
-  for(int d = 1; d<N; d++) {        // < distance between i and j
+
+for(int d = 1; d<N; d++) {        // < distance between i and j
+	#pragma omp parallel for shared(C)
     for(int i=0; i<N; i++) {        // < starting at each i
+	
       int j = i + d;                // < compute end j
 
       // stop when exceeding boundary
-      if (j >= N) break;
+      if (j < N){
 
       // find cheapest cut between i and j
       int min = INT_MAX;
+
       for(int k=i; k<j; k++) {
+
         int costs = C[i*N+k] + C[(k+1)*N+j] + l[i] * l[k+1] * l[j+1];
         min = (costs < min) ? costs : min;
       }
       C[i*N+j] = min;
     }
   }
+}
 
   double end = now();
 
