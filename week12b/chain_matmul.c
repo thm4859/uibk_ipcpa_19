@@ -23,7 +23,7 @@ typedef struct _cl_mm_environment {
     cl_context context;
     cl_command_queue queue;
     cl_program program;
-    cl_kernel kernel;//have a better name than kernel!
+    cl_kernel chain;//have a better name than kernel!
 } cl_mm_environment;
 
 cl_mm_environment createMMEnvironment();
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     
     
 
-    int S = N+1;
+	int S = N+1;
 	printf("Computing minimum cost for multiplying %d matrices ...\n",N);
 
 	// generate random matrix sizes
@@ -64,21 +64,36 @@ int main(int argc, char** argv) {
 
 	// compute minimum costs
 	int* C = (int*)malloc(sizeof(int)*N*N);
-
-	double start = now();
+	int* D = (int*)malloc(sizeof(int)*N*N);
+	
 
         // fill matrix
         for(int i = 0; i<N; i++) {
             for(int j = 0; j<N; j++) {
                 C[i*N+j] = 0.0; 
+                D[i*N+j] = 0.0;
             }
         }
 
-		//todo: have a reference alorithm here (copy paste from omp file)
-		//++++ also have the result in the aptly named int result
-		//didnt test now but should run once the kernel is there...
-		//adjust the environment!!!
-		int result=0;
+	for(int d = 1; d<N; d++) {        // < distance between i and j
+		for(int i=0; i<N; i++) {        // < starting at each i
+			int j = i + d;                // < compute end j
+
+			// stop when exceeding boundary
+			if (j >= N) break;
+
+			// find cheapest cut between i and j
+			int min = RAND_MAX;
+			for(int k=i; k<j; k++) {
+				int costs = D[i*N+k] + D[(k+1)*N+j] + l[i] * l[k+1] * l[j+1];
+				min = (costs < min) ? costs : min;
+			}
+			D[i*N+j] = min;
+		}
+	}
+	double start1 = now();
+
+		int result=D[N-1];
 
         // repeat for tiles (once that kernel works!)
         
@@ -89,36 +104,28 @@ int main(int argc, char** argv) {
     
             // create buffer on device
             cl_int err;
-            cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_READ_WRITE, N * N * sizeof(value_t), NULL, &err);
+            cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, N * N * sizeof(int), NULL, &err);
             CLU_ERRCHECK(err, "Failed to create buffer for matrix");
-            cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, S * sizeof(value_t), NULL, &err);
-			CLU_ERRCHECK(err, "Failed to create buffer for liste");
+            cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, S * sizeof(int), NULL, &err);
+	    CLU_ERRCHECK(err, "Failed to create buffer for liste");
 
             // transfer data
-            err = clEnqueueWriteBuffer(env.queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
-            CLU_ERRCHECK(err, "Failed to write matrix to device");
-            err = clEnqueueWriteBuffer(env.queue, size_list, CL_TRUE, 0,  N * N * sizeof(value_t), l, 0, NULL, NULL);
+            err = clEnqueueWriteBuffer(env.queue, size_list, CL_TRUE, 0,  S* sizeof(value_t), l, 0, NULL, NULL);
             CLU_ERRCHECK(err, "Failed to write liste to device");
-
-			//ok now buffers set on gpu -> new write kernel and set approp args
-			//
-
 
 
             // submit kernel -> left that in as an example, need to write my own kernel now
             cl_event event;
-	    const int TS = 32;
-	    const size_t local[2] = { TS, TS };
-	    const size_t globalXL[2] = { xl, xl };
-	    const size_t global[2] = { N, N };
-            CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.add_zeros, 2, NULL, globalXL, local, 0, NULL, &event), "Failed to enqueue 2D kernel");
-	    cluSetKernelArguments(env.add_zeros, 4,
+	    const size_t global = N;            
+
+	    cluSetKernelArguments(env.chain, 3,
                 sizeof(int), &N,
-                sizeof(cl_mem), (void *)&devMatB,
-                sizeof(int), &xl,
-                sizeof(cl_mem), (void *)&devMatBXL
+                sizeof(cl_mem), (void *)&devMatC,
+                sizeof(cl_mem), (void *)&size_list
             );
-            
+	    CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.chain, 1, NULL, &global, NULL, 0, NULL, &event), "Failed to enqueue 2D kernel");            
+
+
             // wait for kernel
             clWaitForEvents(1,&event);
             
@@ -139,21 +146,29 @@ int main(int argc, char** argv) {
             // release event
             CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
 
-            // copy results back to host -> super inefficent we just need [0][N] but right now not worth logic overhead
-            err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N * N * sizeof(value_t), C, 0, NULL, NULL);
+            // copy results back to host -> super inefficent we just need [0][N-1] but right now not worth logic overhead
+            err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N * N * sizeof(int), C, 0, NULL, NULL);
             CLU_ERRCHECK(err, "Failed reading back result");
 
             // check result
             bool success = true;
 
-			if(result!=C[N]){ //primitive validation 
+			if(result!=C[N-1]){ //primitive validation 
 					success = false;
 			}
-            
-            
-            double seconds = duration / 1e9;
+                        double seconds = duration / 1e9;
+            for(int i=0;i<N;i++){
+		for(int j=0;j<N;j++){
+			if(C[N*i+j]==0){
+				result=42;
+			}
+			printf("%i  ", C[N*i+j]);
+		}
+		printf("\n");
+	    }
 
-            printf("\tDuration: %2.3fs, GFLOPS: %5.3f, Verification: %s\n", seconds, C[N], (success)?"OK":"FAILED");
+
+            printf("\tDuration: %2.3fs, GFLOPS: %i, Verification: %s\n", seconds, C[N-1], (success)?"OK":"FAILED");
             
 
             // free device memory
@@ -168,6 +183,7 @@ int main(int argc, char** argv) {
         // free host memory
 	free(l);
 	free(C);
+	free(D);
 
     
 
@@ -201,10 +217,8 @@ cl_mm_environment createMMEnvironment() {
 
     // create kernel from source
     cl_int err;
-    res.program = cluBuildProgramFromFile(res.context, device_id, "mat_mul.cl", NULL);
-    res.kernel = clCreateKernel(res.program, "matrixMul4", &err);
-    res.add_zeros = clCreateKernel(res.program,"paddingAddZeroes",&err);
-    res.lose_zeros = clCreateKernel(res.program,"paddingRemoveZeroes",&err);
+    res.program = cluBuildProgramFromFile(res.context, device_id, "chainMatOptim.cl", NULL);
+    res.chain = clCreateKernel(res.program, "chainMatOptim", &err);
     CLU_ERRCHECK(err, "Failed to create mat_mul kernel from program");
 
     // done
@@ -216,12 +230,11 @@ void destroyMMEnvironment(cl_mm_environment env) {
     // wait for completed operations (there should be none)
     CLU_ERRCHECK(clFlush(env.queue),            "Failed to flush command queue");
     CLU_ERRCHECK(clFinish(env.queue),           "Failed to wait for command queue completion");
-    CLU_ERRCHECK(clReleaseKernel(env.kernel),   "Failed to release kernel");
+    CLU_ERRCHECK(clReleaseKernel(env.chain),   "Failed to release kernel");
     CLU_ERRCHECK(clReleaseProgram(env.program), "Failed to release program");
 
     // free management resources
     CLU_ERRCHECK(clReleaseCommandQueue(env.queue), "Failed to release command queue");
     CLU_ERRCHECK(clReleaseContext(env.context),    "Failed to release OpenCL context");
 }
-
 
