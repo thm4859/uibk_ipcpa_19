@@ -43,7 +43,8 @@ int main(int argc, char** argv) {
     // ---------- setup ----------
 
     cl_mm_environment env = createMMEnvironment();
-    
+	int minSize = 10;
+	int maxSize = 20;
 	int N = 20;
 	if (argc > 1) {
 		N = atoi(argv[1]);
