@@ -6,9 +6,9 @@ CC_FLAGS=-O3 -march=native -std=c11 -I$(OCL_HOME)/include -L$(OCL_HOME)/lib -Wer
 
 COMMON_DEPENDENCIES=Makefile utils.h
 
-all: mat_mul_bench
+all: chain_matmul_ocl
 
-mat_mul_bench: $(COMMON_DEPENDENCIES) chain_matmul.c cl_utils.h
+chain_matmul_ocl: $(COMMON_DEPENDENCIES) chain_matmul.c cl_utils.h
 	@$(CC) $(CC_FLAGS) chain_matmul.c -o chain_matmul_ocl -lOpenCL -lm -fopenmp
 
 .PHONEY: clean
