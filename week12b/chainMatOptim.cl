@@ -5,7 +5,7 @@ __kernel void chainMatOptim(
 	const __global int* l,
 	__global int* C){
 	int i =  get_global_id(0);
-	C[i*N+i]=42;
+	C[i*N+i]=0;
 	barrier(CLK_LOCAL_MEM_FENCE);
 	for(int d = 1; d<N; d++) {        // < distance between i and j
 		int j = i + d;                // < compute end j
@@ -18,8 +18,7 @@ __kernel void chainMatOptim(
 			int costs = C[i*N+k] + C[(k+1)*N+j] + l[i] * l[k+1] * l[j+1];
 			min = (costs < min) ? costs : min;
 		}
-		C[i*N+j] = i;
+		C[i*N+j] = min;
 	}
 	
 }
-
