@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
             cl_int err;
             cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, N * N * sizeof(int), NULL, &err);
             CLU_ERRCHECK(err, "Failed to create buffer for matrix");
-            cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY, S * sizeof(int), NULL, &err);
+            cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_WRITE | CL_MEM_HOST_WRITE_ONLY, S * sizeof(int), NULL, &err);
 	    CLU_ERRCHECK(err, "Failed to create buffer for liste");
 
             // transfer data
@@ -120,8 +120,8 @@ int main(int argc, char** argv) {
 
 	    cluSetKernelArguments(env.chain, 3,
                 sizeof(int), &N,
-                sizeof(cl_mem), (void *)&devMatC,
-                sizeof(cl_mem), (void *)&size_list
+                sizeof(cl_mem), (void *)&size_list,
+                sizeof(cl_mem), (void *)&devMatC
             );
 	    CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.chain, 1, NULL, &global, NULL, 0, NULL, &event), "Failed to enqueue 2D kernel");            
 
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
             CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
 
             // copy results back to host -> super inefficent we just need [0][N-1] but right now not worth logic overhead
-            err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N * N * sizeof(int), C, 0, NULL, NULL);
+            err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N*N  * sizeof(int), C, 0, NULL, NULL);
             CLU_ERRCHECK(err, "Failed reading back result");
 
             // check result
@@ -156,12 +156,10 @@ int main(int argc, char** argv) {
 			if(result!=C[N-1]){ //primitive validation 
 					success = false;
 			}
-                        double seconds = duration / 1e9;
+            double seconds = duration / 1e9;
             for(int i=0;i<N;i++){
 		for(int j=0;j<N;j++){
-			if(C[N*i+j]==0){
-				result=42;
-			}
+			
 			printf("%i  ", C[N*i+j]);
 		}
 		printf("\n");
