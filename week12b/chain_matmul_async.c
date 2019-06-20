@@ -59,6 +59,7 @@ int main(int argc, char** argv) {
 	// generate random matrix sizes
 	srand(0);
 	int* l = (int*)malloc(sizeof(int)*S);
+	#pragma omp parallel for
 	for(int i=0; i<S; i++) {
 		l[i] = ((rand() /  (float)RAND_MAX) * (maxSize - minSize)) + minSize;
 	}
@@ -69,7 +70,9 @@ int main(int argc, char** argv) {
 	
 
         // fill matrix
+	#pragma omp parallel for
         for(int i = 0; i<N; i++) {
+	#pragma omp parallel for
             for(int j = 0; j<N; j++) {
                 C[i*N+j] = 0; 
                 D[i*N+j] = 0;
@@ -77,11 +80,12 @@ int main(int argc, char** argv) {
         }
 
 	for(int d = 1; d<N; d++) {        // < distance between i and j
+	#pragma omp parallel for
 		for(int i=0; i<N; i++) {        // < starting at each i
 			int j = i + d;                // < compute end j
 
 			// stop when exceeding boundary
-			if (j >= N) break;
+			if (j < N){
 
 			// find cheapest cut between i and j
 			int min = RAND_MAX;
@@ -91,7 +95,7 @@ int main(int argc, char** argv) {
 			}
 			D[i*N+j] = min;
 		}
-	}
+	}}
 	double start1 = now();
 
 		int result=D[N-1];
@@ -125,6 +129,9 @@ int main(int argc, char** argv) {
 	if (N%B != 0) NB++; // < increase by 1 if there is an extra block
 	size_t global = NB;
 	cl_ulong start, end, duration;
+
+	
+
 	for(int bd = 0; bd<NB; bd++) {
 		cluSetKernelArguments(env.chain, 5,
 		sizeof(int), &N,
@@ -137,29 +144,24 @@ int main(int argc, char** argv) {
 
 
 		// wait for kernel
-		clWaitForEvents(1,&event);
+		//clWaitForEvents(1,&event); //this here costs the most performance...
 
-		// test whether kernel finished successfully
-		cl_int status;
-		clGetEventInfo(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, NULL);
-		if (status < 0) {
-			CLU_ERRCHECK(-status, "Kernel failed to execute succesfully.");
-			exit(1);
-		}
 
 		// get execution time
 		if(bd==0){
 			clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
 		}
-		if(bd==NB-1){
+		if(bd==NB-1){//would assume that this would block. But isnt the only thing apparantly
 			clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
 		}
 		duration = end - start;
 
 		// release event
-		CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
+		CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");//works also outside loop
 
 	}
+
+	CLU_ERRCHECK(clFinish(env.queue), "Failed to wait for command queue completion");
 		// copy results back to host -> super inefficent we just need [0][N-1] but right now not worth logic overhead
 	err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N*N  * sizeof(int), C, 0, NULL, NULL);
 	CLU_ERRCHECK(err, "Failed reading back result");
