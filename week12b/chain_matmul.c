@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     cl_mm_environment env = createMMEnvironment();
 	int minSize = 10;
 	int maxSize = 20;
-	int N = 20;
+	int N = 200;
 	if (argc > 1) {
 		N = atoi(argv[1]);
 	}
@@ -70,8 +70,8 @@ int main(int argc, char** argv) {
         // fill matrix
         for(int i = 0; i<N; i++) {
             for(int j = 0; j<N; j++) {
-                C[i*N+j] = 0.0; 
-                D[i*N+j] = 0.0;
+                C[i*N+j] = 0; 
+                D[i*N+j] = 0;
             }
         }
 
@@ -99,79 +99,84 @@ int main(int argc, char** argv) {
         
         
 
-            // clear result
-            memset(C,0,sizeof(value_t) * N * N);
-    
-            // create buffer on device
-            cl_int err;
-            cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, N * N * sizeof(int), NULL, &err);
-            CLU_ERRCHECK(err, "Failed to create buffer for matrix");
-            cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_WRITE | CL_MEM_HOST_WRITE_ONLY, S * sizeof(int), NULL, &err);
-	    CLU_ERRCHECK(err, "Failed to create buffer for liste");
+	// clear result
+	memset(C,0,sizeof(int) * N * N);
 
-            // transfer data
-            err = clEnqueueWriteBuffer(env.queue, size_list, CL_TRUE, 0,  S* sizeof(value_t), l, 0, NULL, NULL);
-            CLU_ERRCHECK(err, "Failed to write liste to device");
+	// create buffer on device
+	cl_int err;
+	cl_mem devMatC = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, N * N * sizeof(int), NULL, &err);
+	CLU_ERRCHECK(err, "Failed to create buffer for matrix");
+	cl_mem size_list = clCreateBuffer(env.context, CL_MEM_READ_WRITE | CL_MEM_HOST_WRITE_ONLY, S * sizeof(int), NULL, &err);
+	CLU_ERRCHECK(err, "Failed to create buffer for liste");
 
-
-            // submit kernel -> left that in as an example, need to write my own kernel now
-            cl_event event;
-	    const size_t global = N;            
-
-	    cluSetKernelArguments(env.chain, 3,
-                sizeof(int), &N,
-                sizeof(cl_mem), (void *)&size_list,
-                sizeof(cl_mem), (void *)&devMatC
-            );
-	    CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.chain, 1, NULL, &global, NULL, 0, NULL, &event), "Failed to enqueue 2D kernel");            
+	// transfer data
+	err = clEnqueueWriteBuffer(env.queue, size_list, CL_TRUE, 0,  S* sizeof(value_t), l, 0, NULL, NULL);
+	CLU_ERRCHECK(err, "Failed to write liste to device");
 
 
-            // wait for kernel
-            clWaitForEvents(1,&event);
-            
-            // test whether kernel finished successfully
-            cl_int status;
-            clGetEventInfo(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, NULL);
-            if (status < 0) {
-                CLU_ERRCHECK(-status, "Kernel failed to execute succesfully.");
-                exit(1);
-            }
-            
-            // get execution time
-            cl_ulong start, end, duration;
-            clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
-            clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
-            duration = end - start;
-   
-            // release event
-            CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
 
-            // copy results back to host -> super inefficent we just need [0][N-1] but right now not worth logic overhead
-            err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N*N  * sizeof(int), C, 0, NULL, NULL);
-            CLU_ERRCHECK(err, "Failed reading back result");
+	// submit kernel -> left that in as an example, need to write my own kernel now
+	cl_event event;
+	            
 
-            // check result
-            bool success = true;
+	int B = 22;           // < the block size (obtained through linear search)
+	int NB = N/B;         // < the number of blocks in each dimension
+	if (N%B != 0) NB++; // < increase by 1 if there is an extra block
+	const size_t global = NB;
+	cl_ulong start, end, duration;
+	for(int bd = 0; bd<NB; bd++) {
+		cluSetKernelArguments(env.chain, 5,
+		sizeof(int), &N,
+		sizeof(int), &B,
+		sizeof(int), &bd,
+		sizeof(cl_mem), (void *)&size_list,
+		sizeof(cl_mem), (void *)&devMatC
+		);
+		CLU_ERRCHECK(clEnqueueNDRangeKernel(env.queue, env.chain, 1, NULL, &global, NULL, 0, NULL, &event), "Failed to enqueue 2D kernel");            
 
-			if(result!=C[N-1]){ //primitive validation 
-					success = false;
-			}
-            double seconds = duration / 1e9;
-            for(int i=0;i<N;i++){
-		for(int j=0;j<N;j++){
-			
-			printf("%i  ", C[N*i+j]);
+
+		// wait for kernel
+		clWaitForEvents(1,&event);
+
+		// test whether kernel finished successfully
+		cl_int status;
+		clGetEventInfo(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, NULL);
+		if (status < 0) {
+		CLU_ERRCHECK(-status, "Kernel failed to execute succesfully.");
+		exit(1);
 		}
-		printf("\n");
-	    }
+
+		// get execution time
+		if(bd==0){
+			clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+		}
+		if(bd==NB-1){
+			clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+		}
+		duration = end - start;
+
+		// release event
+		CLU_ERRCHECK(clReleaseEvent(event), "Failed to release event");
+
+	}
+		// copy results back to host -> super inefficent we just need [0][N-1] but right now not worth logic overhead
+	err = clEnqueueReadBuffer(env.queue, devMatC, CL_TRUE, 0, N*N  * sizeof(int), C, 0, NULL, NULL);
+	CLU_ERRCHECK(err, "Failed reading back result");
+
+	// check result
+	bool success = true;
+
+	if(result!=C[N-1]){ //primitive validation 
+			success = false;
+	}
+	double seconds = duration / 1e9;
+
+	printf("\tDuration: %2.3fs, GFLOPS: %i, Verification: %s\n", seconds, result, (success)?"OK":"FAILED");
 
 
-            printf("\tDuration: %2.3fs, GFLOPS: %i, Verification: %s\n", seconds, C[N-1], (success)?"OK":"FAILED");
-            
-
-            // free device memory
-            CLU_ERRCHECK(clReleaseMemObject(devMatC), "Failed to release Matrix ");
-            CLU_ERRCHECK(clReleaseMemObject(size_list), "Failed to release liste");
+	// free device memory
+	CLU_ERRCHECK(clReleaseMemObject(devMatC), "Failed to release Matrix ");
+	CLU_ERRCHECK(clReleaseMemObject(size_list), "Failed to release liste");
 
         
         
